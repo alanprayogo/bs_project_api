@@ -46,7 +46,7 @@ def prec_respon_1c(hand):
         if shdc == [4, 4, 1, 4] or shdc == [4, 1, 4, 4]:
             possibleBids.append(8)
     # 1NT, 2NT, 3NT
-    if analyzer.is_balanced_distribution:
+    if analyzer.is_balanced_distribution and not analyzer.has_five_card_major(suit_counts):
         if 8 <= total_hcp <=10:
             possibleBids.append(4)        
         if 11 <= total_hcp <=13:
