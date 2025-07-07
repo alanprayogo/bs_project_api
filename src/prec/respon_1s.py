@@ -1,6 +1,6 @@
 from utils.bridge_analyzer import BridgeHandAnalyzer
 
-def prec_respon_1h(hand):
+def prec_respon_1s(hand):
     analyzer = BridgeHandAnalyzer()
     analysis = analyzer.calculate_hcp_and_distribution(hand)
     
@@ -13,41 +13,43 @@ def prec_respon_1h(hand):
     possibleBids = []
 
     bid_meanings = {
-        1:"Bid 1S",
-        2:"Bid 1NT",
-        3:"Bid 2C",
-        4:"Bid 2D",
-        5:"Bid 2H",
+        1:"Bid 1NT",
+        2:"Bid 2C",
+        3:"Bid 2D",
+        4:"Bid 2H",
+        5:"Bid 2S",
         6:"Bid 2NT",
-        7:"Bid 3H",
+        7:"Bid 3S",
         8:"Bid 3NT",
-        9:"Bid 4H",
+        9:"Bid 4S",
         10:"Bid 4NT",
         0:"Pass"
     }
 
     # Determine the contract based on HCP and suit counts
-    # 1S
-    if total_hcp >= 6 and suit_counts["S"] >= 4:
-        possibleBids.append(1)
     # 1NT
-    if analyzer.is_balanced_distribution(dist) and suit_counts["H"] <= 2:
-        if 6 <= total_hcp <= 10:
-            possibleBids.append(2)
-        if 11 <= total_hcp <= 13:
+    if analyzer.is_balanced_distribution(dist) and suit_counts["S"] <= 2:
+        if 6<=total_hcp <=10:
+            possibleBids.append(1)
+        if 11<=total_hcp <=13:
             possibleBids.append(6)
-        if 14 <= total_hcp <= 15:
+        if 14<=total_hcp <=15:
             possibleBids.append(8)
-        if total_hcp >= 16:
+        if total_hcp >=16:
             possibleBids.append(10)
     # 2C, 2D
     if total_hcp >= 12:
-        if (suit_counts["C"] >= 5 and suit_counts["H"] <= 2):
+        # 2C
+        if (suit_counts["C"] >= 5 and suit_counts["S"] <= 2):
+            possibleBids.append(2)
+        # 2D
+        if (suit_counts["D"] >= 5 and suit_counts["S"] <= 2):
             possibleBids.append(3)
-        if (suit_counts["D"]>= 5 and suit_counts["H"] <=2):
-            possibleBids.append(4)
-    # 2H, 3H, 4H
-    if suit_counts["H"] >= 3:
+    # 2H
+    if total_hcp >= 12 and (suit_counts["H"] >= 5 and suit_counts["S"] <=2):
+        possibleBids.append(4)
+    # 2S, 3S, 4S
+    if suit_counts["S"] >= 3:
         if 6<= total_hcp <= 9:
             possibleBids.append(5)
         if 10<= total_hcp <= 11:
