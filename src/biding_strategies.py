@@ -6,6 +6,7 @@ from src.prec.respon_1d import prec_respon_1d
 from src.prec.respon_1h import prec_respon_1h
 from src.prec.respon_1s import prec_respon_1s
 from src.prec.respon_1nt import prec_respon_1nt
+from src.prec.respon_2c import prec_respon_2c
 
 BIDING_STRATEGIES = {
     # Precision
@@ -15,6 +16,7 @@ BIDING_STRATEGIES = {
     "prec_respon_1h": prec_respon_1h,
     "prec_respon_1s": prec_respon_1s,
     "prec_respon_1nt": prec_respon_1nt,
+    "prec_respon_2c": prec_respon_2c,
     # SAYC
     # "sayc_opening": sayc_opening,
     # "sayc_respon_1c": sayc_respon_1c,
