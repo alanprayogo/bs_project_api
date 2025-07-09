@@ -1,0 +1,12 @@
+# Folders to ignore
+/data/
+/notebooks/
+/results/
+
+# Files to ignore
+/models/train_model.py
+/models/predictor.py
+/utils/evaluation.py
+/evaluate_results.py
+/main.py
+/preprocess.py
