@@ -1,3 +1,6 @@
+__pycache__/
+*.pyc
+
 # Folders to ignore
 /data/
 /notebooks/
