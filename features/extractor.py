@@ -4,24 +4,18 @@ import sys
 import pandas as pd
 
 def calculate_hcp(hand):
-    """
-    Hitung High Card Points (HCP) dari sebuah tangan.
-    A = 4, K = 3, Q = 2, J = 1
-    """
+    # Hitung High Card Points (HCP) dari sebuah tangan.
+    # A = 4, K = 3, Q = 2, J = 1
     hcp_map = {'A': 4, 'K': 3, 'Q': 2, 'J': 1}
     return sum(hcp_map.get(card[0], 0) for card in hand)
 
 def count_suit_length(hand, suit):
-    """
-    Hitung jumlah kartu dalam suit tertentu di tangan.
-    Contoh suit: 'S', 'H', 'D', 'C'
-    """
+    # Hitung jumlah kartu dalam suit tertentu di tangan.
+    # Contoh suit: 'S', 'H', 'D', 'C'
     return sum(1 for card in hand if card.endswith(suit))
 
 def get_distribution(hand):
-    """
-    Mengembalikan distribusi jumlah kartu per suit: [S, H, D, C]
-    """
+    # Mengembalikan distribusi jumlah kartu per suit: [S, H, D, C]
     spades = count_suit_length(hand, 'S')
     hearts = count_suit_length(hand, 'H')
     diamonds = count_suit_length(hand, 'D')
@@ -29,12 +23,10 @@ def get_distribution(hand):
     return [spades, hearts, diamonds, clubs]
 
 def is_balanced(distribution):
-    """
-    Tentukan apakah distribusi seimbang berdasarkan aturan bridge:
-    - 4333, 4432, 5332 → Balanced
-    - Lainnya → Tidak seimbang
-    Output: 0=Balanced, 1=Likely Balanced, 2=Likely Unbalanced, 3=Unbalanced
-    """
+    # Tentukan apakah distribusi seimbang berdasarkan aturan bridge:
+    # 4333, 4432, 5332 → Balanced
+    # Lainnya → Tidak seimbang
+    # Output: 0=Balanced, 1=Likely Balanced, 2=Likely Unbalanced, 3=Unbalanced
     sorted_dist = sorted(distribution, reverse=True)
     if sorted_dist == [4, 3, 3, 3]:
         return 0
@@ -48,9 +40,7 @@ def is_balanced(distribution):
         return 3
 
 def estimate_losing_tricks(hand):
-    """
-    Estimasi Losing Trick Count (LTC) sederhana berdasarkan top 3 kartu per suit.
-    """
+    # Estimasi Losing Trick Count (LTC) sederhana berdasarkan top 3 kartu per suit.
     ltc = 0
     suits = ['S', 'H', 'D', 'C']
     for suit in suits:
@@ -84,6 +74,7 @@ def estimate_losing_tricks(hand):
     return round(ltc, 2)
 
 def has_stopper(hand, suit):
+    # Mendefinisikan dan menghitung stopper
     cards_in_suit = [c[0] for c in hand if c.endswith(suit)]
     if len(cards_in_suit) == 0:
         return 0  # void, no stopper
@@ -97,17 +88,8 @@ def has_stopper(hand, suit):
         return 0
 
 def extract_features_from_hand(hand1, hand2, as_dataframe=True):
-    """
-    Ekstrak fitur dari pasangan tangan.
-    
-    Parameters:
-    - hand1 (list): list dari 13 kartu pemain 1
-    - hand2 (list): list dari 13 kartu pemain 2
-    - as_dataframe (bool): jika True, kembalikan pd.DataFrame
-    
-    Returns:
-    - dict or pd.DataFrame
-    """
+    # Ekstrak fitur dari pasangan tangan.
+
     combined_hand = hand1 + hand2
 
     # Distribusi suit
