@@ -12,7 +12,7 @@ import pandas as pd
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Daftar fitur sesuai urutan di CSV hasil preprocess.py
+# Daftar fitur sesuai urutan di CSV hasil preprocessing
 FEATURE_NAMES = [
     "hcp", "hcp_spades", "hcp_hearts", "hcp_diamonds", "hcp_clubs",
     "dist_spades", "dist_hearts", "dist_diamonds", "dist_clubs",
@@ -28,43 +28,53 @@ FEATURE_NAMES = [
 class ContractOptimizationProblem(ElementwiseProblem):
     def __init__(self, feature_vector):
         """
-        Inisialisasi masalah optimisasi.
+        Inisialisasi masalah optimisasi berdasarkan fitur tangan bridge.
 
         :param feature_vector: list/array dengan 24 fitur numerik hasil ekstraksi
         """
         if len(feature_vector) != len(FEATURE_NAMES):
             raise ValueError(f"feature_vector harus memiliki {len(FEATURE_NAMES)} fitur")
 
+        # Simpan fitur sebagai dictionary bernama
         self.feature_dict = dict(zip(FEATURE_NAMES, feature_vector))
-        self.model_dir = os.path.abspath("./models/saved")
+        self.model_dir = os.path.abspath("./models/saved/")
         self._load_models()
 
-        # Inisialisasi problem dengan batasan variabel
+        # Definisi variabel optimisasi
         super().__init__(
             n_var=5,
             n_obj=1,
             n_constr=0,
             xl=np.array([0.0, 0.0, 0.0, 0.0, 0.0]),   # Lower bounds
-            xu=np.array([1.0, 1.0, 1.0, 1.0, 1.0])    # Upper bounds
+            xu=np.array([1.0, 1.0, 1.0, 1.0, 1.0])     # Upper bounds
         )
 
     def _load_models(self):
-        """Muat model dan encoder sekali saja"""
+        """Muat model ML untuk evaluasi strategi"""
         try:
             self.suit_model = joblib.load(os.path.join(self.model_dir, "rf_contract_suit.pkl"))
-            self.suit_encoder = joblib.load(os.path.join(self.model_dir, "label_encoder_suit.pkl"))
+            self.level_model = joblib.load(os.path.join(self.model_dir, "rf_contract_level.pkl"))
+            self.category_model = joblib.load(os.path.join(self.model_dir, "rf_contract_category.pkl"))
+
+            self.le_suit = joblib.load(os.path.join(self.model_dir, "label_encoder_suit.pkl"))
+            self.le_level = joblib.load(os.path.join(self.model_dir, "label_encoder_level.pkl"))
+            self.le_category = joblib.load(os.path.join(self.model_dir, "label_encoder_category.pkl"))
+
             logging.info("Model berhasil dimuat")
         except Exception as e:
             logging.error(f"Gagal memuat model: {e}")
             raise
 
     def _calculate_hcp_score(self, weight):
+        """Semakin tinggi HCP, semakin baik → skor positif"""
         return self.feature_dict["hcp"] * weight
 
     def _calculate_ltc_score(self, weight):
+        """LTC rendah bagus → jadikan negatif agar minimalkan LTC"""
         return self.feature_dict["ltc"] * (-weight)
 
     def _calculate_stopper_score(self, weight):
+        """Total stopper semakin tinggi semakin baik"""
         total = (
             self.feature_dict["stopper_spades"] +
             self.feature_dict["stopper_hearts"] +
@@ -74,6 +84,7 @@ class ContractOptimizationProblem(ElementwiseProblem):
         return total * weight
 
     def _calculate_distribution_score(self, weight):
+        """Distribusi yang tidak rata bisa menjadi keuntungan (tergantung suit)"""
         deviation = (
             abs(self.feature_dict["dist_spades"] - 5) +
             abs(self.feature_dict["dist_hearts"] - 5) +
@@ -84,7 +95,8 @@ class ContractOptimizationProblem(ElementwiseProblem):
 
     def _evaluate(self, x, out, *args, **kwargs):
         """
-        Fungsi evaluasi untuk NSGA-II.
+        Evaluasi solusi dalam konteks kontrak bridge.
+        
         x = [weight_hcp, weight_ltc, weight_stopper, weight_distribution, prefer_major]
         """
         weight_hcp, weight_ltc, weight_stopper, weight_distribution, prefer_major = x
@@ -95,28 +107,26 @@ class ContractOptimizationProblem(ElementwiseProblem):
         score += self._calculate_stopper_score(weight_stopper)
         score += self._calculate_distribution_score(weight_distribution)
 
-        # Tambahkan bonus jika suit mayor dipilih dan cocok
+        # Tambahkan bonus jika suit mayor (S/H) direkomendasikan oleh model awal
         if prefer_major > 0.5:
-            suit_pred = self.suit_model.predict(
-                pd.DataFrame([self.feature_dict])
-            )[0]
+            feature_df = pd.DataFrame([self.feature_dict])
+            suit_pred_encoded = self.suit_model.predict(feature_df)[0]
+            suit_pred = self.le_suit.inverse_transform([suit_pred_encoded])[0]
             if suit_pred in ['S', 'H']:
                 score += 1.0
 
         # Minimalkan negasi skor
-        out["F"] = [-score]
-
+        out["F"] = [-score]  # NSGA-II meminimalkan fungsi objektif
 
 def optimize_contract_strategy(feature_array, n_gen=50):
     """
-    Jalankan NSGA-II untuk mencari strategi optimal dalam menentukan kontrak.
+    Jalankan NSGA-II untuk mencari strategi optimal bidding.
     
-    :param feature_array: fitur numerik dari tangan North-South (list atau array)
+    :param feature_array: fitur tangan North-South (harus sesuai FEATURE_NAMES)
     :param n_gen: jumlah generasi evolusi
-    :return: solusi Pareto-optimal (array 2D)
+    :return: array solusi Pareto-optimal
     """
     problem = ContractOptimizationProblem(feature_array)
-
     algorithm = NSGA2(
         pop_size=100,
         eliminate_duplicates=True
@@ -128,11 +138,11 @@ def optimize_contract_strategy(feature_array, n_gen=50):
                    seed=1,
                    verbose=False)
 
-    # Pastikan hasil selalu dalam format 2D
     solutions = np.atleast_2d(res.X)
 
+    # Cetak hasil terbaik
     print("Solusi Pareto-optimal:")
-    for i, x in enumerate(solutions[:3]):  # Ambil maksimal 3 strategi
+    for i, x in enumerate(solutions[:3]):
         print(f"Strategi {i+1}: ", {
             "weight_hcp": round(float(x[0]), 2),
             "weight_ltc": round(float(x[1]), 2),

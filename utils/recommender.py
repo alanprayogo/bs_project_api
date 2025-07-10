@@ -6,34 +6,38 @@ from .validation import validate_contract_based_on_bridge_rules
 def select_best_contract_based_on_all_criteria(features, predicted_contract, nsga2_recommendations):
     """
     Pilih satu kontrak terbaik berdasarkan validasi aturan bridge dan strategi NSGA-II.
-    
+
     Parameters:
     - features (dict): fitur tangan hasil ekstraksi
-    - predicted_contract (str): hasil prediksi awal model ML
-    - nsga2_recommendations (list of dict): strategi hasil optimisasi
+    - predicted_contract (str): hasil prediksi awal dari model ML
+    - nsga2_recommendations (list of dict): strategi hasil optimisasi NSGA-II
     
     Returns:
     - dict: {
         "final_recommendation": str,
-        "confidence_score": float,
         "valid": bool,
+        "confidence_score": float,
         "reasons": list of str,
         "suggestions": list of str
     }
     """
     contract_validations = []
 
-    # Validasi kontrak prediksi awal
+    # 1. Evaluasi prediksi awal dari Random Forest (ML)
     ml_validation = validate_contract_based_on_bridge_rules(features, predicted_contract)
     ml_validation["contract"] = predicted_contract
     ml_validation["source"] = "ml"
     contract_validations.append(ml_validation)
 
-    # Validasi kontrak dari strategi NSGA-II
+    # 2. Evaluasi strategi dari NSGA-II
     for rec in nsga2_recommendations:
-        # Bangun kontrak dari bobot strategi
-        level_candidates = [int(rec['weight_hcp'] * 7), int(rec['weight_stopper'] * 7)]
+        # Buat level kontrak berdasarkan bobot HCP dan stopper
+        weight_hcp = rec.get("weight_hcp", 0)
+        weight_stopper = rec.get("weight_stopper", 0)
+
+        level_candidates = [int(weight_hcp * 7), int(weight_stopper * 7)]
         level = max(1, min(7, round(sum(level_candidates) / len(level_candidates)) + 1))
+        
         generated_contract = f"{level}{predicted_contract[1:]}"  # Gunakan suit dari prediksi awal
 
         val_result = validate_contract_based_on_bridge_rules(features, generated_contract)
@@ -41,7 +45,7 @@ def select_best_contract_based_on_all_criteria(features, predicted_contract, nsg
         val_result["source"] = "nsga2"
         contract_validations.append(val_result)
 
-    # Urutkan berdasarkan confidence score
+    # 3. Urutkan berdasarkan confidence score
     contract_validations.sort(key=lambda x: x["confidence_score"], reverse=True)
 
     best = contract_validations[0]

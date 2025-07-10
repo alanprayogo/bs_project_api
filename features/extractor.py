@@ -1,6 +1,7 @@
 # features/extractor.py
 
 import sys
+import pandas as pd
 
 def calculate_hcp(hand):
     """
@@ -95,11 +96,17 @@ def has_stopper(hand, suit):
     else:
         return 0
 
-def extract_features_from_hand(hand1, hand2):
+def extract_features_from_hand(hand1, hand2, as_dataframe=True):
     """
-    Ekstrak fitur dari pasangan hand1 dan hand2.
-    Input: hand1 dan hand2 sebagai list dari 13 kartu masing-masing.
-    Output: dictionary fitur.
+    Ekstrak fitur dari pasangan tangan.
+    
+    Parameters:
+    - hand1 (list): list dari 13 kartu pemain 1
+    - hand2 (list): list dari 13 kartu pemain 2
+    - as_dataframe (bool): jika True, kembalikan pd.DataFrame
+    
+    Returns:
+    - dict or pd.DataFrame
     """
     combined_hand = hand1 + hand2
 
@@ -140,6 +147,7 @@ def extract_features_from_hand(hand1, hand2):
     num_diamonds_low, num_diamonds_high = get_cardinality_range(diamonds)
     num_clubs_low, num_clubs_high = get_cardinality_range(clubs)
 
+    # Dictionary fitur
     features = {
         "hcp": total_hcp,
         "hcp_spades": hcp_spades,
@@ -172,4 +180,8 @@ def extract_features_from_hand(hand1, hand2):
         "num_clubs_high": num_clubs_high,
     }
 
-    return features
+    # Return type
+    if as_dataframe:
+        return pd.DataFrame([features])
+    else:
+        return features

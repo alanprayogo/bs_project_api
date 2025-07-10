@@ -32,8 +32,6 @@ def predict_contract(hand1, hand2):
     
     Returns:
     - dict: {
-        "hand1": [...],
-        "hand2": [...],
         "final_recommendation": str,
         "valid": bool,
         "confidence_score": float,
@@ -42,10 +40,12 @@ def predict_contract(hand1, hand2):
     }
     """
     # 1. Ekstrak fitur dari pasangan tangan
-    features = extract_features_from_hand(hand1, hand2)
+    features = extract_features_from_hand(hand1, hand2, as_dataframe=False)
     
-    # 2. Prediksi awal dengan Random Forest
+    # 2. Gunakan DataFrame bernama untuk prediksi
     feature_df = pd.DataFrame([features])
+
+    # 3. Prediksi awal dengan Random Forest
     suit_pred_encoded = suit_model.predict(feature_df)[0]
     predicted_suit = le_suit.inverse_transform([suit_pred_encoded])[0]
 
@@ -53,7 +53,7 @@ def predict_contract(hand1, hand2):
     predicted_level = le_level.inverse_transform([level_pred_encoded])[0]
     predicted_contract = f"{predicted_level}{predicted_suit}"
 
-    # 3. Jalankan NSGA-II untuk strategi alternatif
+    # 4. Jalankan NSGA-II untuk strategi alternatif
     feature_array = list(features.values())
     nsga2_solutions = optimize_contract_strategy(feature_array)
 
@@ -69,22 +69,14 @@ def predict_contract(hand1, hand2):
             "prefer_major": round(float(x[4]), 2)
         })
 
-    # 4. Pilih kontrak terbaik berdasarkan validasi aturan bridge
+    # 5. Pilih kontrak terbaik berdasarkan validasi aturan bridge dan strategi
     best_recommendation = select_best_contract_based_on_all_criteria(
         features,
         predicted_contract,
         recommendations
     )
 
-    return {
-        "hand1": hand1,
-        "hand2": hand2,
-        "final_recommendation": best_recommendation["final_recommendation"],
-        "valid": best_recommendation["valid"],
-        "confidence_score": best_recommendation["confidence_score"],
-        "reasons": best_recommendation["reasons"],
-        "suggestions": best_recommendation["suggestions"]
-    }
+    return best_recommendation
 
 if __name__ == "__main__":
     # Contoh input manual
@@ -98,12 +90,12 @@ if __name__ == "__main__":
     print("=== REKOMENDASI AKHIR ===")
     print(f"Kontrak direkomendasikan: {result['final_recommendation']}")
     print(f"Tingkat keyakinan: {result['confidence_score']:.2f}")
-    
+
     if result['reasons']:
         print("Alasan:")
         for reason in result['reasons']:
             print(f" - {reason}")
-    
+
     if result['suggestions']:
         print("Saran:")
         for suggestion in result['suggestions']:
