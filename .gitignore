@@ -8,8 +8,11 @@ __pycache__/
 
 # Files to ignore
 /models/train_model.py
+/models/feature_names.py
 /models/predictor.py
 /utils/evaluation.py
 /evaluate_results.py
 /main.py
 /preprocess.py
+/test_scoring.py
+/test_scoring_with_nsga2.py
