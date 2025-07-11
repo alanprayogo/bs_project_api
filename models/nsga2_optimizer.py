@@ -27,11 +27,9 @@ FEATURE_NAMES = [
 
 class ContractOptimizationProblem(ElementwiseProblem):
     def __init__(self, feature_vector):
-        """
-        Inisialisasi masalah optimisasi berdasarkan fitur tangan bridge.
+        # Inisialisasi masalah optimisasi berdasarkan fitur tangan bridge.
 
-        :param feature_vector: list/array dengan 24 fitur numerik hasil ekstraksi
-        """
+        # :param feature_vector: list/array dengan 24 fitur numerik hasil ekstraksi
         if len(feature_vector) != len(FEATURE_NAMES):
             raise ValueError(f"feature_vector harus memiliki {len(FEATURE_NAMES)} fitur")
 
@@ -50,7 +48,7 @@ class ContractOptimizationProblem(ElementwiseProblem):
         )
 
     def _load_models(self):
-        """Muat model ML untuk evaluasi strategi"""
+        # Muat model ML untuk evaluasi strategi
         try:
             self.suit_model = joblib.load(os.path.join(self.model_dir, "rf_contract_suit.pkl"))
             self.level_model = joblib.load(os.path.join(self.model_dir, "rf_contract_level.pkl"))
@@ -66,15 +64,15 @@ class ContractOptimizationProblem(ElementwiseProblem):
             raise
 
     def _calculate_hcp_score(self, weight):
-        """Semakin tinggi HCP, semakin baik → skor positif"""
+        # Semakin tinggi HCP, semakin baik → skor positif
         return self.feature_dict["hcp"] * weight
 
     def _calculate_ltc_score(self, weight):
-        """LTC rendah bagus → jadikan negatif agar minimalkan LTC"""
+        # LTC rendah bagus → jadikan negatif agar minimalkan LTC
         return self.feature_dict["ltc"] * (-weight)
 
     def _calculate_stopper_score(self, weight):
-        """Total stopper semakin tinggi semakin baik"""
+        # Total stopper semakin tinggi semakin baik
         total = (
             self.feature_dict["stopper_spades"] +
             self.feature_dict["stopper_hearts"] +
@@ -84,7 +82,7 @@ class ContractOptimizationProblem(ElementwiseProblem):
         return total * weight
 
     def _calculate_distribution_score(self, weight):
-        """Distribusi yang tidak rata bisa menjadi keuntungan (tergantung suit)"""
+        # Distribusi yang tidak rata bisa menjadi keuntungan (tergantung suit)
         deviation = (
             abs(self.feature_dict["dist_spades"] - 5) +
             abs(self.feature_dict["dist_hearts"] - 5) +
@@ -94,11 +92,8 @@ class ContractOptimizationProblem(ElementwiseProblem):
         return deviation * (-weight)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        """
-        Evaluasi solusi dalam konteks kontrak bridge.
-        
-        x = [weight_hcp, weight_ltc, weight_stopper, weight_distribution, prefer_major]
-        """
+        # Evaluasi solusi dalam konteks kontrak bridge.
+        # x = [weight_hcp, weight_ltc, weight_stopper, weight_distribution, prefer_major]
         weight_hcp, weight_ltc, weight_stopper, weight_distribution, prefer_major = x
 
         score = 0
@@ -119,13 +114,7 @@ class ContractOptimizationProblem(ElementwiseProblem):
         out["F"] = [-score]  # NSGA-II meminimalkan fungsi objektif
 
 def optimize_contract_strategy(feature_array, n_gen=50):
-    """
-    Jalankan NSGA-II untuk mencari strategi optimal bidding.
-    
-    :param feature_array: fitur tangan North-South (harus sesuai FEATURE_NAMES)
-    :param n_gen: jumlah generasi evolusi
-    :return: array solusi Pareto-optimal
-    """
+    # Jalankan NSGA-II untuk mencari strategi optimal bidding.
     problem = ContractOptimizationProblem(feature_array)
     algorithm = NSGA2(
         pop_size=100,
