@@ -89,8 +89,17 @@ def predict_contract_verbose(hand1, hand2, debug=False):
     return best_recommendation
 
 if __name__ == "__main__":
-    hand1 = ["AS", "KS", "QS", "JS", "TS", "9S", "8S", "AH", "KH", "QH", "AD", "KD", "QD"]
-    hand2 = ["AC", "KC", "QC", "JC", "TC", "9C", "8C", "7C", "6C", "5C", "4C", "3C", "2C"]
+    # hand1 = ["AS", "KS", "QS", "JS", "TS", "9S", "8S", "AH", "KH", "QH", "AD", "KD", "QD"]
+    # hand2 = ["AC", "KC", "QC", "JC", "TC", "9C", "8C", "7C", "6C", "5C", "4C", "3C", "2C"]
+
+    # hand1 = ["AS", "KS", "QS", "JS", "TS", "AH", "KH", "QH", "JH", "TH", "AD", "KD", "QD"]
+    # hand2 = ["2S", "3S", "4S", "5S", "6S", "2H", "3H", "4H", "5H", "6H", "2D", "3D", "4D"]
+
+    # hand1 = ["AS", "KS", "QS", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
+    # hand2 = ["2S", "3S", "4S", "AH", "KH", "AD", "KD", "8C", "6D", "7D", "5D", "3C", "4C"]
+
+    hand1 = ["5S", "6S", "7S", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
+    hand2 = ["2S", "3S", "4S", "AH", "KH", "AD", "KD", "8C", "6D", "7D", "5D", "3C", "4C"]
 
     print("=== SISTEM REKOMENDASI KONTRAK BRIDGE ===\n")
     result = predict_contract_verbose(hand1, hand2, debug=True)

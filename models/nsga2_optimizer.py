@@ -90,9 +90,9 @@ class ContractOptimizationProblem(ElementwiseProblem):
 
         out["F"] = [-score]
 
-def optimize_contract_strategy(feature_array, n_gen=100):
+def optimize_contract_strategy(feature_array, n_gen=50):
     problem = ContractOptimizationProblem(feature_array)
-    algorithm = NSGA2(pop_size=200, eliminate_duplicates=True)
+    algorithm = NSGA2(pop_size=100, eliminate_duplicates=True)
     res = minimize(problem, algorithm, ('n_gen', n_gen), seed=1, verbose=False)
     solutions = np.atleast_2d(res.X)
     return solutions

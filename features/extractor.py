@@ -32,60 +32,77 @@ def is_balanced(distribution):
         return 0
     elif sorted_dist == [4, 4, 3, 2] or sorted_dist == [5, 3, 3, 2]:
         return 1
+    elif sorted_dist == [5, 4, 2, 2]:
+        return 2
     elif sorted_dist[0] >= 6:
         return 3
-    elif sorted_dist[0] == 5 and sorted_dist[1] <= 3:
-        return 2
     else:
         return 3
+    
+def calculate_honor_weight_per_suit(hand, suit):
+    # Hitung bobot honor untuk suit tertentu dalam satu tangan.
+    # Bobot honor:
+    # - AKQ = 3.0
+    # - AK = 2.0
+    # - AQ = 1.5
+    # - A = 1.0
+    # - KQ = 1.0
+    # - Kx = 0.5
+    # - Qxx = 0.25
 
-def estimate_losing_tricks(hand):
-    # Estimasi Losing Trick Count (LTC) sederhana berdasarkan top 3 kartu per suit.
-    ltc = 0
-    suits = ['S', 'H', 'D', 'C']
-    for suit in suits:
-        cards_in_suit = sorted([c[0] for c in hand if c.endswith(suit)], key=lambda x: 'AKQJT98765432'.index(x))
-        length = len(cards_in_suit)
-        if length == 0:
-            continue
-        elif length == 1:
-            # Single card
-            ltc += 2 if cards_in_suit[0] != 'A' else 1
-        elif length == 2:
-            # Two cards
-            top_two = cards_in_suit[:2]
-            if 'A' in top_two and 'K' in top_two:
-                ltc += 0
-            elif 'A' in top_two or 'K' in top_two:
-                ltc += 1
-            else:
-                ltc += 2
-        else:
-            # Three or more cards
-            top_three = cards_in_suit[:3]
-            missing = 0
-            if 'A' not in top_three:
-                missing += 1
-            if 'K' not in top_three:
-                missing += 1
-            if 'Q' not in top_three:
-                missing += 1
-            ltc += min(missing, 3)
-    return round(ltc, 2)
-
-def has_stopper(hand, suit):
-    # Mendefinisikan dan menghitung stopper
-    cards_in_suit = [c[0] for c in hand if c.endswith(suit)]
-    if len(cards_in_suit) == 0:
-        return 0  # void, no stopper
-    elif 'A' in cards_in_suit:
-        return 3
-    elif 'K' in cards_in_suit:
-        return 2 if len(cards_in_suit) > 1 else 1
-    elif 'Q' in cards_in_suit:
-        return 2 if len(cards_in_suit) > 2 else 1
+    # Ambil kartu dari suit tertentu
+    suit_cards = [card for card in hand if card.endswith(suit)]
+    
+    # Ekstrak honor cards (A, K, Q, J)
+    honors = []
+    for card in suit_cards:
+        if card[0] in ['A', 'K', 'Q', 'J']:
+            honors.append(card[0])
+    
+    # Hitung bobot berdasarkan kombinasi honor
+    if 'A' in honors and 'K' in honors and 'Q' in honors:
+        return 3.0  # AKQ
+    elif 'A' in honors and 'K' in honors:
+        return 2.0  # AK
+    elif 'A' in honors and 'Q' in honors:
+        return 1.5  # AQ
+    elif 'A' in honors:
+        return 1.0  # A
+    elif 'K' in honors and 'Q' in honors:
+        return 1.0  # KQ
+    elif 'K' in honors:
+        return 0.5  # Kx
+    elif 'Q' in honors:
+        return 0.25  # Qxx
     else:
-        return 0
+        return 0.0  # Tidak ada honor
+    
+def calculate_honor_weight_all_suits(hand):
+    # Hitung bobot honor untuk semua suit dalam satu tangan.
+    honor_s = calculate_honor_weight_per_suit(hand, 'S')
+    honor_h = calculate_honor_weight_per_suit(hand, 'H')
+    honor_d = calculate_honor_weight_per_suit(hand, 'D')
+    honor_c = calculate_honor_weight_per_suit(hand, 'C')
+    
+    return honor_s, honor_h, honor_d, honor_c
+
+def calculate_partnership_honor_weight_per_suit(hand1, hand2):
+    # Hitung bobot honor per suit untuk partnership (2 tangan).
+    # Hitung honor untuk hand1
+    honor_s1, honor_h1, honor_d1, honor_c1 = calculate_honor_weight_all_suits(hand1)
+    # Hitung honor untuk hand2  
+    honor_s2, honor_h2, honor_d2, honor_c2 = calculate_honor_weight_all_suits(hand2)
+    
+    # Jumlahkan per suit
+    sum_honor_s = honor_s1 + honor_s2
+    sum_honor_h = honor_h1 + honor_h2
+    sum_honor_d = honor_d1 + honor_d2
+    sum_honor_c = honor_c1 + honor_c2
+    
+    # Total honor power
+    honor_power = sum_honor_s + sum_honor_h + sum_honor_d + sum_honor_c
+    
+    return sum_honor_s, sum_honor_h, sum_honor_d, sum_honor_c, honor_power
 
 def extract_features_from_hand(hand1, hand2, as_dataframe=True):
     # Ekstrak fitur dari pasangan tangan.
@@ -106,17 +123,11 @@ def extract_features_from_hand(hand1, hand2, as_dataframe=True):
     balanced_hand1 = is_balanced(get_distribution(hand1))
     balanced_hand2 = is_balanced(get_distribution(hand2))
 
-    # Stopper
-    stopper_spades = has_stopper(combined_hand, 'S')
-    stopper_hearts = has_stopper(combined_hand, 'H')
-    stopper_diamonds = has_stopper(combined_hand, 'D')
-    stopper_clubs = has_stopper(combined_hand, 'C')
-
-    # LTC
-    ltc = estimate_losing_tricks(combined_hand)
-
     # Total HCP
     total_hcp = hcp_spades + hcp_hearts + hcp_diamonds + hcp_clubs
+
+    # Honor weight calculations
+    sum_honor_s, sum_honor_h, sum_honor_d, sum_honor_c, honor_power = calculate_partnership_honor_weight_per_suit(hand1, hand2)
 
     # Rentang jumlah kartu per suit
     def get_cardinality_range(count):
@@ -145,12 +156,11 @@ def extract_features_from_hand(hand1, hand2, as_dataframe=True):
         "balanced_hand1": balanced_hand1,
         "balanced_hand2": balanced_hand2,
 
-        "stopper_spades": stopper_spades,
-        "stopper_hearts": stopper_hearts,
-        "stopper_diamonds": stopper_diamonds,
-        "stopper_clubs": stopper_clubs,
-
-        "ltc": ltc,
+        "sum_honor_s": sum_honor_s,
+        "sum_honor_h": sum_honor_h,
+        "sum_honor_d": sum_honor_d,
+        "sum_honor_c": sum_honor_c,
+        "honor_power": honor_power,
 
         "num_spades_low": num_spades_low,
         "num_spades_high": num_spades_high,
