@@ -46,35 +46,49 @@ def validate_contract_based_on_bridge_rules(features, contract):
     reasons = []
     suggestions = []
 
-    # 1. Validasi HCP vs Level
+    # 1. Validasi Umum
     if level == 1 and hcp_total < 15:
         reasons.append("Level 1 terlalu rendah untuk HCP sebesar ini")
     elif level == 2 and hcp_total < 20:
         reasons.append("Tidak cukup HCP untuk kontrak level 2+")
 
-    # 2. Validasi Game Contract
+    # 2. Validasi Game Contract (Level ≥3)
     if level >= 3:
         if suit == 'NT':
             if stopper_spades < 2 or stopper_hearts < 2 or stopper_diamonds < 2 or stopper_clubs < 2:
                 reasons.append("Tidak memiliki stopper yang cukup untuk kontrak No Trump")
                 suggestions.append("Pertimbangkan kontrak suit lain atau raise bidding secara hati-hati")
-        elif suit in ['S', 'H']:
+            if not (dist_spades == 4 and dist_hearts == 4 and dist_diamonds in [2, 3] and dist_clubs in [2, 3]):
+                reasons.append("Distribusi tidak ideal untuk kontrak No Trump")
+                suggestions.append("Pastikan distribusi kartu seimbang (misalnya 4-4-3-2)")
+
+        elif suit in ['S', 'H']:  # Suit Mayor
             if hcp_total < 24:
                 reasons.append("HCP kurang untuk Game di major suit")
                 suggestions.append("Pastikan partner memiliki HCP tambahan")
-        elif suit in ['D', 'C']:
+            if dist_spades < 4 and suit == 'S':
+                reasons.append("Distribusi Spade tidak mencukupi untuk main di Spade")
+            if dist_hearts < 4 and suit == 'H':
+                reasons.append("Distribusi Heart tidak mencukupi untuk main di Heart")
+
+        elif suit in ['D', 'C']:  # Suit Minor
             if hcp_total < 27:
                 reasons.append("HCP kurang untuk Game di minor suit")
                 suggestions.append("Cari partner dengan HCP lebih tinggi atau distribusi bagus")
+            if dist_diamonds < 5 and suit == 'D':
+                reasons.append("Distribusi Diamond tidak cukup panjang")
+            if dist_clubs < 5 and suit == 'C':
+                reasons.append("Distribusi Club tidak cukup panjang")
 
     # 3. Validasi LTC (Losing Trick Count)
     if suit == 'NT' and ltc > 8:
         reasons.append("LTC terlalu tinggi untuk kontrak No Trump")
         suggestions.append("Pertimbangkan kontrak partial atau cari stopper tambahan")
-
     if suit in ['S', 'H'] and ltc > 7:
         reasons.append("LTC tinggi untuk major suit game")
         suggestions.append("Pastikan ada distribusi bagus atau stopper kuat")
+    if suit in ['D', 'C'] and ltc > 6:
+        reasons.append("LTC terlalu tinggi untuk minor suit game")
 
     # 4. Validasi Slam / Grand Slam
     if level == 6 and hcp_total < 32:
