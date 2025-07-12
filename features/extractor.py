@@ -177,3 +177,8 @@ def extract_features_from_hand(hand1, hand2, as_dataframe=True):
         return pd.DataFrame([features])
     else:
         return features
+    
+# hand1 = ['AS', 'KS', 'QS', 'JS', 'TS', '9H', '8H', '7H', '6D', '5D', '4D', '3C', '2C']
+# hand2 = ['AH', 'KH', 'QH', 'JH', 'TH', '9S', '8S', '7S', '6C', '5C', '4C', '3D', '2D']
+# features = extract_features_from_hand(hand1, hand2, as_dataframe=True)
+# print(features)

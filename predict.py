@@ -1,5 +1,3 @@
-# predict.py
-
 import os
 import pandas as pd
 from features.extractor import extract_features_from_hand
@@ -26,14 +24,22 @@ def predict_contract_verbose(hand1, hand2, debug=False):
     feature_df = pd.DataFrame([features])
 
     hcp_total = features.get("hcp", 0)
-    ltc = features.get("ltc", 0)
+    honor_power = features.get("honor_power", 0)
+    sum_honor_s = features.get("sum_honor_s", 0)
+    sum_honor_h = features.get("sum_honor_h", 0)
+    sum_honor_d = features.get("sum_honor_d", 0)
+    sum_honor_c = features.get("sum_honor_c", 0)
     dist_spades = features.get("dist_spades", 0)
     dist_hearts = features.get("dist_hearts", 0)
     dist_diamonds = features.get("dist_diamonds", 0)
     dist_clubs = features.get("dist_clubs", 0)
 
     print(f"- HCP Total: {hcp_total}")
-    print(f"- LTC: {ltc}")
+    print(f"- Honor Power: {honor_power}")
+    print(f"- Honor Spades: {sum_honor_s}")
+    print(f"- Honor Hearts: {sum_honor_h}")
+    print(f"- Honor Diamonds: {sum_honor_d}")
+    print(f"- Honor Clubs: {sum_honor_c}")
     print(f"- Distribusi: {dist_spades}S {dist_hearts}H {dist_diamonds}D {dist_clubs}C")
 
     # Prediksi awal
@@ -55,14 +61,16 @@ def predict_contract_verbose(hand1, hand2, debug=False):
 
     recommendations = []
     for i, x in enumerate(nsga2_solutions[:5]):
-        recommendations.append({
-            "strategy_id": i + 1,
-            "weight_hcp": round(float(x[0]), 2),
-            "weight_ltc": round(float(x[1]), 2),
-            "weight_stopper": round(float(x[2]), 2),
-            "weight_distribution": round(float(x[3]), 2),
-            "prefer_major": round(float(x[4]), 2)
-        })
+        recommendations.append([
+            float(x[0]),  # weight_hcp
+            float(x[1]),  # weight_honor_spades
+            float(x[2]),  # weight_honor_hearts
+            float(x[3]),  # weight_honor_diamonds
+            float(x[4]),  # weight_honor_clubs
+            float(x[5]),  # weight_balance
+            float(x[6]),  # weight_suit
+            float(x[7])   # prefer_major
+        ])
 
     # Pilih kontrak terbaik
     print("\n[3] VALIDASI DAN REKOMENDASI AKHIR")
@@ -89,17 +97,11 @@ def predict_contract_verbose(hand1, hand2, debug=False):
     return best_recommendation
 
 if __name__ == "__main__":
-    # hand1 = ["AS", "KS", "QS", "JS", "TS", "9S", "8S", "AH", "KH", "QH", "AD", "KD", "QD"]
-    # hand2 = ["AC", "KC", "QC", "JC", "TC", "9C", "8C", "7C", "6C", "5C", "4C", "3C", "2C"]
-
-    # hand1 = ["AS", "KS", "QS", "JS", "TS", "AH", "KH", "QH", "JH", "TH", "AD", "KD", "QD"]
-    # hand2 = ["2S", "3S", "4S", "5S", "6S", "2H", "3H", "4H", "5H", "6H", "2D", "3D", "4D"]
-
-    # hand1 = ["AS", "KS", "QS", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
+    # hand1 = ["5S", "6S", "7S", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
     # hand2 = ["2S", "3S", "4S", "AH", "KH", "AD", "KD", "8C", "6D", "7D", "5D", "3C", "4C"]
 
-    hand1 = ["5S", "6S", "7S", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
-    hand2 = ["2S", "3S", "4S", "AH", "KH", "AD", "KD", "8C", "6D", "7D", "5D", "3C", "4C"]
+    hand1 = ["AS", "KS", "QS", "JS", "TS", "9S", "8S", "AH", "KH", "QH", "AD", "KD", "QD"]
+    hand2 = ["AC", "KC", "QC", "JC", "TC", "9C", "8C", "7C", "6C", "5C", "4C", "3C", "2C"]
 
     print("=== SISTEM REKOMENDASI KONTRAK BRIDGE ===\n")
     result = predict_contract_verbose(hand1, hand2, debug=True)
