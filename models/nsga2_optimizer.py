@@ -62,7 +62,13 @@ class ContractOptimizationProblem(ElementwiseProblem):
         }
         return scores
 
-    def _calculate_balance_score(self, weight_balance, suit_pred):
+    def _calculate_distribution_score(self, weight_balance, weight_suit):
+        # Prediksi suit dari model
+        feature_df = pd.DataFrame([self.feature_dict])
+        suit_pred_encoded = self.suit_model.predict(feature_df)[0]
+        suit_pred = self.le_suit.inverse_transform([suit_pred_encoded])[0]
+        
+        # Keseimbangan tangan untuk no-trump
         balance_score = 0
         if self.feature_dict["balanced_hand1"] in [0, 1] and self.feature_dict["balanced_hand2"] in [0, 1]:
             if suit_pred == 'NT':
@@ -71,9 +77,8 @@ class ContractOptimizationProblem(ElementwiseProblem):
                 balance_score += 0.5 + 0.1 * strong_suits  # Bonus tambahan untuk honor kuat
             else:
                 balance_score += 0.2  # Bonus kecil untuk suit kontrak
-        return balance_score * weight_balance
-
-    def _calculate_suit_score(self, weight_suit, suit_pred):
+        
+        # Preferensi suit untuk tangan tidak seimbang
         suit_score = 0
         if self.feature_dict["balanced_hand1"] in [2, 3] or self.feature_dict["balanced_hand2"] in [2, 3]:
             # Temukan suit terpanjang
@@ -95,7 +100,8 @@ class ContractOptimizationProblem(ElementwiseProblem):
             # Bonus tambahan jika suit terpanjang sesuai dengan prediksi
             if suit_pred in ['S', 'H', 'D', 'C'] and longest_suit == {'S': 'spades', 'H': 'hearts', 'D': 'diamonds', 'C': 'clubs'}[suit_pred]:
                 suit_score += 0.3
-        return suit_score * weight_suit
+
+        return balance_score * weight_balance, suit_score * weight_suit
 
     def _evaluate(self, x, out, *args, **kwargs):
         weight_hcp, weight_honor_spades, weight_honor_hearts, weight_honor_diamonds, weight_honor_clubs, weight_balance, weight_suit, prefer_major = x
@@ -103,6 +109,9 @@ class ContractOptimizationProblem(ElementwiseProblem):
         # Skor total untuk kekuatan tangan
         total_score = 0
         total_score += self._calculate_hcp_score(weight_hcp)
+        
+        # Skor distribusi
+        balance_score, suit_score = self._calculate_distribution_score(weight_balance, weight_suit)
         
         # Prediksi suit dari model
         feature_df = pd.DataFrame([self.feature_dict])
@@ -112,15 +121,11 @@ class ContractOptimizationProblem(ElementwiseProblem):
         # Skor honor per suit
         honor_scores = self._calculate_honor_suit_score(weight_honor_spades, weight_honor_hearts, weight_honor_diamonds, weight_honor_clubs)
         
-        # Skor distribusi
-        balance_score = self._calculate_balance_score(weight_balance, suit_pred)
-        suit_score = self._calculate_suit_score(weight_suit, suit_pred)
-        
         # Skor kecocokan suit
         if suit_pred == 'NT':
             # Untuk NT, gunakan balance_score dan jumlah honor kuat per suit
             total_score += balance_score
-            strong_suits = sum(1 for s in ['spades', 'hearts', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0)
+            strong_suits = sum(1 for s in ['spades', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0)
             suit_score = sum(honor_scores[s] for s in ['spades', 'hearts', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0) * (0.5 + 0.1 * strong_suits)
         else:
             # Untuk suit kontrak, gunakan suit_score dan honor suit yang diprediksi

@@ -1,31 +1,51 @@
-from .validation import validate_contract_based_on_bridge_rules
-import numpy as np
-import pandas as pd
+from utils.validation import validate_contract_based_on_bridge_rules
 
-def select_best_contract_based_on_all_criteria(features, predicted_contract, nsga2_recommendations, debug=False):
+def select_best_contract_based_on_all_criteria(features, predicted_contract, recommendations, debug=False):
     """
-    Memilih kontrak terbaik berdasarkan fitur, prediksi ML, dan rekomendasi NSGA-II.
-    
+    Pilih kontrak terbaik berdasarkan prediksi ML dan optimisasi NSGA-II.
+
     Parameters:
-    - features: Dict berisi fitur seperti hcp, dist_spades, balanced_hand1, dll.
-    - predicted_contract: Kontrak yang diprediksi oleh model ML (format: "3NT", "4S", dll.)
-    - nsga2_recommendations: List solusi NSGA-II dengan bobot [weight_hcp, weight_honor_spades, ..., prefer_major]
-    - debug: Jika True, cetak informasi debugging
-    
+    - features (dict): Fitur hasil ekstraksi dari extract_features_from_hand()
+    - predicted_contract (str): Kontrak dari model ML (misalnya, "2H")
+    - recommendations (list): Daftar bobot dari NSGA-II [[weight_hcp, weight_honor_spades, ...], ...]
+    - debug (bool): Jika True, tampilkan informasi debug
+
     Returns:
-    - Dict dengan kontrak terbaik, validitas, skor kepercayaan, alasan, dan saran
+    - dict: {
+        "final_recommendation": str,
+        "valid": bool,
+        "confidence_score": float,
+        "reasons": list of str,
+        "suggestions": list of str
+    }
     """
-    contract_validations = []
+    hcp = features.get("hcp", 0)
+    dist_spades = features.get("dist_spades", 0)
+    dist_hearts = features.get("dist_hearts", 0)
+    dist_diamonds = features.get("dist_diamonds", 0)
+    dist_clubs = features.get("dist_clubs", 0)
+    balanced_hand1 = features.get("balanced_hand1", 2)
+    balanced_hand2 = features.get("balanced_hand2", 2)
+    sum_honor_s = features.get("sum_honor_s", 0)
+    sum_honor_h = features.get("sum_honor_h", 0)
+    sum_honor_d = features.get("sum_honor_d", 0)
+    sum_honor_c = features.get("sum_honor_c", 0)
+    honor_power = features.get("honor_power", 0)
 
-    # Evaluasi prediksi awal dari model ML
+    # Validasi kontrak ML
     ml_validation = validate_contract_based_on_bridge_rules(features, predicted_contract)
-    ml_validation["contract"] = predicted_contract
-    ml_validation["source"] = "ML"
-    contract_validations.append(ml_validation)
+    evaluated_contracts = [{
+        "contract": predicted_contract,
+        "source": "ML",
+        "weights": {},
+        "valid": ml_validation["valid"],
+        "confidence_score": ml_validation["confidence_score"],
+        "reasons": ml_validation["reasons"],
+        "suggestions": ml_validation["suggestions"]
+    }]
 
-    # Evaluasi strategi NSGA-II
-    for rec in nsga2_recommendations:
-        # Ambil bobot dari solusi NSGA-II
+    # Evaluasi kontrak dari NSGA-II
+    for rec in recommendations:
         weight_hcp = rec[0]
         weight_honor_spades = rec[1]
         weight_honor_hearts = rec[2]
@@ -35,75 +55,89 @@ def select_best_contract_based_on_all_criteria(features, predicted_contract, nsg
         weight_suit = rec[6]
         prefer_major = rec[7]
 
-        # Tentukan level kontrak berdasarkan HCP dan kekuatan honor
-        hcp_score = features["hcp"] * weight_hcp
+        # Hitung skor HCP dan honor
+        hcp_score = hcp * weight_hcp
         honor_score = (
-            features["sum_honor_s"] * weight_honor_spades +
-            features["sum_honor_h"] * weight_honor_hearts +
-            features["sum_honor_d"] * weight_honor_diamonds +
-            features["sum_honor_c"] * weight_honor_clubs
+            sum_honor_s * weight_honor_spades +
+            sum_honor_h * weight_honor_hearts +
+            sum_honor_d * weight_honor_diamonds +
+            sum_honor_c * weight_honor_clubs
         )
-        level_candidates = [int(hcp_score / 5), int(honor_score / 2)]  # Skala HCP dan honor
-        level = max(1, min(7, round(sum(level_candidates) / len(level_candidates))))  # Batas level 1-7
 
-        # Tentukan suit berdasarkan distribusi dan bobot
-        suit_scores = {
-            'S': (weight_honor_spades * features["sum_honor_s"] + weight_suit * features["dist_spades"] / 4) * (1.5 if prefer_major > 0.5 else 1.0),
-            'H': (weight_honor_hearts * features["sum_honor_h"] + weight_suit * features["dist_hearts"] / 4) * (1.5 if prefer_major > 0.5 else 1.0),
-            'D': (weight_honor_diamonds * features["sum_honor_d"] + weight_suit * features["dist_diamonds"] / 4) * (0.8 if prefer_major <= 0.5 else 1.0),
-            'C': (weight_honor_clubs * features["sum_honor_c"] + weight_suit * features["dist_clubs"] / 4) * (0.8 if prefer_major <= 0.5 else 1.0),
-            'NT': (weight_balance * (1 if features["balanced_hand1"] in [0, 1] and features["balanced_hand2"] in [0, 1] else 0) +
-                   sum(features[f"sum_honor_{s[0]}"] * rec[i + 1] for i, s in enumerate(['spades', 'hearts', 'diamonds', 'clubs'])))
-        }
-        
-        # Jika kedua tangan seimbang, prioritaskan NT
-        if features["balanced_hand1"] in [0, 1] and features["balanced_hand2"] in [0, 1]:
-            suit_scores['NT'] *= 1.2  # Bonus untuk NT pada tangan seimbang
-        # Jika tangan tidak seimbang, prioritaskan suit terpanjang
-        elif features["balanced_hand1"] in [2, 3] or features["balanced_hand2"] in [2, 3]:
-            longest_suit = max(
-                {'spades': features["dist_spades"], 'hearts': features["dist_hearts"],
-                 'diamonds': features["dist_diamonds"], 'clubs': features["dist_clubs"]},
-                key=lambda x: features[f"dist_{x}"]
-            )
-            suit_scores[{'spades': 'S', 'hearts': 'H', 'diamonds': 'D', 'clubs': 'C'}[longest_suit]] *= 1.3
+        # Tentukan level kontrak
+        if hcp_score >= 37 and honor_score >= 2.0:
+            level = 7  # Grand Slam untuk HCP sangat tinggi
+        elif hcp_score >= 32 and honor_score >= 1.5:
+            level = 6  # Slam
+        else:
+            level = max(1, min(7, round(hcp_score / 8 + honor_score / 4)))
+
+        # Tentukan suit
+        suit_scores = {}
+        if balanced_hand1 in [0, 1] and balanced_hand2 in [0, 1]:
+            suit_scores['NT'] = weight_balance * (1 if balanced_hand1 == 0 and balanced_hand2 == 0 else 0.8) + honor_score
+        else:
+            suit_scores['NT'] = 0  # Tidak mendukung NT jika tangan tidak seimbang
+
+        # Skor suit dengan bonus untuk distribusi panjang
+        suit_scores['S'] = (sum_honor_s * weight_honor_spades + weight_suit * dist_spades / 4) * (1.5 if prefer_major > 0.5 else 1.0)
+        suit_scores['H'] = (sum_honor_h * weight_honor_hearts + weight_suit * dist_hearts / 4) * (1.5 if prefer_major > 0.5 else 1.0)
+        suit_scores['D'] = (sum_honor_d * weight_honor_diamonds + weight_suit * dist_diamonds / 4) * 0.8
+        suit_scores['C'] = (sum_honor_c * weight_honor_clubs + weight_suit * dist_clubs / 4) * 0.8
+        if max(dist_spades, dist_hearts, dist_diamonds, dist_clubs) >= 10:
+            max_suit = max(['S', 'H', 'D', 'C'], key=lambda s: features.get(f'dist_{s.lower()}', 0))
+            suit_scores[max_suit] *= 1.3  # Bonus untuk suit terpanjang ≥ 10
 
         chosen_suit = max(suit_scores, key=suit_scores.get)
         generated_contract = f"{level}{chosen_suit}"
+        validation = validate_contract_based_on_bridge_rules(features, generated_contract)
 
-        # Validasi kontrak
-        val_result = validate_contract_based_on_bridge_rules(features, generated_contract)
-        val_result["contract"] = generated_contract
-        val_result["source"] = "NSGA-II"
-        val_result["weights"] = {
-            "hcp": round(float(weight_hcp), 2),
-            "honor_spades": round(float(weight_honor_spades), 2),
-            "honor_hearts": round(float(weight_honor_hearts), 2),
-            "honor_diamonds": round(float(weight_honor_diamonds), 2),
-            "honor_clubs": round(float(weight_honor_clubs), 2),
-            "balance": round(float(weight_balance), 2),
-            "suit": round(float(weight_suit), 2),
-            "prefer_major": round(float(prefer_major), 2)
-        }
-        contract_validations.append(val_result)
-
-    # Urutkan berdasarkan confidence_score
-    contract_validations.sort(key=lambda x: x["confidence_score"], reverse=True)
-
-    # Debugging
-    if debug:
-        print("\n[DEBUG] Semua kontrak yang dievaluasi:")
-        for c in contract_validations:
-            weights = c.get("weights", {})
-            weights_str = ", ".join(f"{k}:{v:.2f}" for k, v in weights.items())
-            print(f"Kontrak: {c['contract']} | Sumber: {c['source']} | Bobot: {{{weights_str}}} | Valid: {c['valid']} | Skor: {c['confidence_score']:.2f}")
+        evaluated_contracts.append({
+            "contract": generated_contract,
+            "source": "NSGA-II",
+            "weights": {
+                "hcp": weight_hcp,
+                "honor_spades": weight_honor_spades,
+                "honor_hearts": weight_honor_hearts,
+                "honor_diamonds": weight_honor_diamonds,
+                "honor_clubs": weight_honor_clubs,
+                "balance": weight_balance,
+                "suit": weight_suit,
+                "prefer_major": prefer_major
+            },
+            "valid": validation["valid"],
+            "confidence_score": validation["confidence_score"],
+            "reasons": validation["reasons"],
+            "suggestions": validation["suggestions"]
+        })
 
     # Pilih kontrak terbaik
-    best = contract_validations[0]
+    best_contract = max(evaluated_contracts, key=lambda x: (
+        x["valid"],
+        x["confidence_score"],
+        1 if x["source"] == "NSGA-II" else 0,  # Prioritaskan NSGA-II
+        int(x["contract"][0]) if x["contract"][0].isdigit() else 0,  # Prioritaskan level tinggi
+        1 if x["contract"].endswith('NT') else (0.9 if x["contract"].endswith(('S', 'H')) else 0.8)  # Prioritaskan NT, lalu major, lalu minor
+    ))
+
+    if debug:
+        print("\n[DEBUG] Semua kontrak yang dievaluasi:")
+        for contract in evaluated_contracts:
+            print(f"Kontrak: {contract['contract']} | Sumber: {contract['source']} | "
+                  f"Bobot: {contract['weights']} | Valid: {contract['valid']} | Skor: {contract['confidence_score']}")
+            if contract["reasons"]:
+                print("Alasan:")
+                for reason in contract["reasons"]:
+                    print(f" - {reason}")
+            if contract["suggestions"]:
+                print("Saran:")
+                for suggestion in contract["suggestions"]:
+                    print(f" - {suggestion}")
+
     return {
-        "final_recommendation": best["contract"],
-        "valid": best["valid"],
-        "confidence_score": best["confidence_score"],
-        "reasons": best.get("reasons", []),
-        "suggestions": best.get("suggestions", [])
+        "final_recommendation": best_contract["contract"],
+        "valid": best_contract["valid"],
+        "confidence_score": best_contract["confidence_score"],
+        "reasons": best_contract["reasons"],
+        "suggestions": best_contract["suggestions"]
     }
