@@ -123,8 +123,12 @@ def select_best_contract_based_on_all_criteria(features, predicted_contract, rec
     if debug:
         print("\n[DEBUG] Semua kontrak yang dievaluasi:")
         for contract in evaluated_contracts:
+            # Format bobot untuk tampilan yang lebih bersahabat
+            formatted_weights = {key: f"{value:.2f}" for key, value in contract['weights'].items()}
+            
             print(f"Kontrak: {contract['contract']} | Sumber: {contract['source']} | "
-                  f"Bobot: {contract['weights']} | Valid: {contract['valid']} | Skor: {contract['confidence_score']}")
+                f"Bobot: {formatted_weights} | Valid: {contract['valid']} | Skor: {contract['confidence_score']:.2f}")
+            
             if contract["reasons"]:
                 print("Alasan:")
                 for reason in contract["reasons"]:
