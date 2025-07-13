@@ -13,6 +13,7 @@ __pycache__/
 /utils/evaluation.py
 /evaluate_results.py
 /main.py
+/config.py
 /preprocess.py
 /test_scoring.py
 /test_scoring_with_nsga2.py
