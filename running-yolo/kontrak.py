@@ -8,8 +8,8 @@ model = YOLO('../yolo-weights/playingCards.pt')
 
 # Daftar path gambar yang ingin diproses
 image_paths = [
-    './running-yolo/images/image.png',
-    './running-yolo/images/image2.png'
+    './running-yolo/images/in_kontrak/hand1.jpg',
+    './running-yolo/images/in_kontrak/hand1.jpg'
 ]
 
 # File output JSON
@@ -36,18 +36,18 @@ suit_order = {'S': 0, 'H': 1, 'D': 2, 'C': 3}
 # Prioritas Rank
 rank_order = {
     'A': 0,
-    '2': 1,
-    '3': 2,
-    '4': 3,
-    '5': 4,
-    '6': 5,
-    '7': 6,
-    '8': 7,
-    '9': 8,
-    '10': 9,
-    'J': 10,
-    'Q': 11,
-    'K': 12
+    'K': 1,
+    'Q': 2,
+    'J': 3,
+    '10': 4,
+    '9': 5,
+    '8': 6,
+    '7': 7,
+    '6': 8,
+    '5': 9,
+    '4': 10,
+    '3': 11,
+    '2': 12
 }
 
 # Fungsi untuk ekstrak suit dan rank

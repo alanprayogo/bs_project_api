@@ -7,7 +7,7 @@ import os
 model = YOLO('../yolo-weights/playingCards.pt')
 
 # Path gambar input
-img_path = './running-yolo/images/hand_image.jpg'
+img_path = './running-yolo/images/in_biding/hand_image.jpg'
 
 # Path file output
 output_file = './running-yolo/detected_cards.json'
