@@ -23,6 +23,7 @@ BIDING_STRATEGIES = {
     "prec_respon_2d": prec_respon_2d,
     "prec_respon_2h": prec_respon_2h,
     "prec_respon_2s": prec_respon_2s,
+    
     # SAYC
     # "sayc_opening": sayc_opening,
     # "sayc_respon_1c": sayc_respon_1c,
