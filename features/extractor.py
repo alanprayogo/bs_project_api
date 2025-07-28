@@ -1,184 +1,184 @@
-# features/extractor.py
-
 import sys
 import pandas as pd
+import os
+import numpy as np
+from itertools import product
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import List, Tuple, Dict, Union
+import warnings
+warnings.filterwarnings('ignore')
 
-def calculate_hcp(hand):
-    # Hitung High Card Points (HCP) dari sebuah tangan.
-    # A = 4, K = 3, Q = 2, J = 1
-    hcp_map = {'A': 4, 'K': 3, 'Q': 2, 'J': 1}
-    return sum(hcp_map.get(card[0], 0) for card in hand)
-
-def count_suit_length(hand, suit):
-    # Hitung jumlah kartu dalam suit tertentu di tangan.
-    # Contoh suit: 'S', 'H', 'D', 'C'
-    return sum(1 for card in hand if card.endswith(suit))
-
-def get_distribution(hand):
-    # Mengembalikan distribusi jumlah kartu per suit: [S, H, D, C]
-    spades = count_suit_length(hand, 'S')
-    hearts = count_suit_length(hand, 'H')
-    diamonds = count_suit_length(hand, 'D')
-    clubs = count_suit_length(hand, 'C')
-    return [spades, hearts, diamonds, clubs]
-
-def is_balanced(distribution):
-    # Tentukan apakah distribusi seimbang berdasarkan aturan bridge:
-    # 4333, 4432, 5332 → Balanced
-    # Lainnya → Tidak seimbang
-    # Output: 0=Balanced, 1=Likely Balanced, 2=Likely Unbalanced, 3=Unbalanced
-    sorted_dist = sorted(distribution, reverse=True)
-    if sorted_dist == [4, 3, 3, 3]:
-        return 0
-    elif sorted_dist == [4, 4, 3, 2] or sorted_dist == [5, 3, 3, 2]:
-        return 1
-    elif sorted_dist == [5, 4, 2, 2]:
-        return 2
-    elif sorted_dist[0] >= 6:
-        return 3
-    else:
-        return 3
+class BridgeHandAnalyzer:
+    """
+    A comprehensive bridge hand analyzer for calculating HCP, distributions,
+    honor power, and other bridge-related metrics.
+    """
     
-def calculate_honor_weight_per_suit(hand, suit):
-    # Hitung bobot honor untuk suit tertentu dalam satu tangan.
-    # Bobot honor:
-    # - AKQ = 3.0
-    # - AK = 2.0
-    # - AQ = 1.5
-    # - A = 1.0
-    # - KQ = 1.0
-    # - Kx = 0.5
-    # - Qxx = 0.25
-
-    # Ambil kartu dari suit tertentu
-    suit_cards = [card for card in hand if card.endswith(suit)]
+    def __init__(self):
+        self.hcp_map = {'A': 4, 'K': 3, 'Q': 2, 'J': 1}
+        self.suits = ['S', 'H', 'D', 'C']
+        self.honor_weights = {
+            frozenset(['A', 'K', 'Q']): 3.0,  # AKQ
+            frozenset(['A', 'K']): 2.0,       # AK
+            frozenset(['A', 'Q']): 1.5,       # AQ  
+            frozenset(['A']): 1.0,            # A
+            frozenset(['K', 'Q']): 1.0,       # KQ
+            frozenset(['K']): 0.5,            # K alone
+            frozenset(['Q']): 0.25,           # Q alone
+            frozenset([]): 0.0                # No honors
+        }
     
-    # Ekstrak honor cards (A, K, Q, J)
-    honors = []
-    for card in suit_cards:
-        if card[0] in ['A', 'K', 'Q', 'J']:
-            honors.append(card[0])
+    def calculate_hcp(self, hand: List[str]) -> int:
+        """Calculate High Card Points (HCP) from a hand."""
+        return sum(self.hcp_map.get(card[0], 0) for card in hand)
     
-    # Hitung bobot berdasarkan kombinasi honor
-    if 'A' in honors and 'K' in honors and 'Q' in honors:
-        return 3.0  # AKQ
-    elif 'A' in honors and 'K' in honors:
-        return 2.0  # AK
-    elif 'A' in honors and 'Q' in honors:
-        return 1.5  # AQ
-    elif 'A' in honors:
-        return 1.0  # A
-    elif 'K' in honors and 'Q' in honors:
-        return 1.0  # KQ
-    elif 'K' in honors:
-        return 0.5  # Kx
-    elif 'Q' in honors:
-        return 0.25  # Qxx
-    else:
-        return 0.0  # Tidak ada honor
+    def count_suit_length(self, hand: List[str], suit: str) -> int:
+        """Count number of cards in a specific suit."""
+        return sum(1 for card in hand if card.endswith(suit))
     
-def calculate_honor_weight_all_suits(hand):
-    # Hitung bobot honor untuk semua suit dalam satu tangan.
-    honor_s = calculate_honor_weight_per_suit(hand, 'S')
-    honor_h = calculate_honor_weight_per_suit(hand, 'H')
-    honor_d = calculate_honor_weight_per_suit(hand, 'D')
-    honor_c = calculate_honor_weight_per_suit(hand, 'C')
+    def get_distribution(self, hand: List[str]) -> List[int]:
+        """Return distribution of cards per suit: [S, H, D, C]."""
+        return [self.count_suit_length(hand, suit) for suit in self.suits]
     
-    return honor_s, honor_h, honor_d, honor_c
-
-def calculate_partnership_honor_weight_per_suit(hand1, hand2):
-    # Hitung bobot honor per suit untuk partnership (2 tangan).
-    # Hitung honor untuk hand1
-    honor_s1, honor_h1, honor_d1, honor_c1 = calculate_honor_weight_all_suits(hand1)
-    # Hitung honor untuk hand2  
-    honor_s2, honor_h2, honor_d2, honor_c2 = calculate_honor_weight_all_suits(hand2)
+    def classify_distribution(self, distribution: List[int]) -> Tuple[str, float]:
+        """
+        Classify hand distribution with both category and numeric balance score.
+        Returns: (category_name, balance_score)
+        """
+        sorted_dist = sorted(distribution, reverse=True)
+        
+        if sorted_dist == [4, 3, 3, 3]:
+            return "Balanced (4333)", 0.0
+        elif sorted_dist == [4, 4, 3, 2]:
+            return "Semi-Balanced (4432)", 0.25
+        elif sorted_dist == [5, 3, 3, 2]:
+            return "Semi-Balanced (5332)", 0.25
+        elif sorted_dist == [5, 4, 2, 2]:
+            return "Semi-Balanced (5422)", 0.5
+        elif sorted_dist[0] == 6:
+            if sorted_dist == [6, 3, 2, 2]:
+                return "Unbalanced (6322)", 0.75
+            else:
+                return "Unbalanced (6+ suit)", 0.75
+        elif sorted_dist[0] >= 7:
+            return "Very Unbalanced (7+ suit)", 1.0
+        elif 1 in sorted_dist:
+            return "Unbalanced (singleton)", 0.8
+        elif 0 in sorted_dist:
+            return "Unbalanced (void)", 1.0
+        else:
+            return "Unbalanced (other)", 0.6
     
-    # Jumlahkan per suit
-    sum_honor_s = honor_s1 + honor_s2
-    sum_honor_h = honor_h1 + honor_h2
-    sum_honor_d = honor_d1 + honor_d2
-    sum_honor_c = honor_c1 + honor_c2
+    def calculate_honor_weight_per_suit(self, hand: List[str], suit: str) -> float:
+        """Calculate honor weight for a specific suit."""
+        suit_cards = [card for card in hand if card.endswith(suit)]
+        honors = frozenset(card[0] for card in suit_cards if card[0] in ['A', 'K', 'Q', 'J'])
+        
+        for honor_combo, weight in self.honor_weights.items():
+            if honor_combo.issubset(honors):
+                return weight
+        
+        return 0.0
     
-    # Total honor power
-    honor_power = sum_honor_s + sum_honor_h + sum_honor_d + sum_honor_c
+    def calculate_partnership_honor_power(self, hand1: List[str], hand2: List[str]) -> Dict[str, float]:
+        """Calculate comprehensive honor power metrics for partnership."""
+        combined_hand = hand1 + hand2
+        
+        suit_honors = {}
+        total_honor_power = 0
+        
+        for suit in self.suits:
+            h1_weight = self.calculate_honor_weight_per_suit(hand1, suit)
+            h2_weight = self.calculate_honor_weight_per_suit(hand2, suit)
+            combined_weight = h1_weight + h2_weight
+            
+            suit_honors[f'honor_{suit.lower()}'] = combined_weight
+            total_honor_power += combined_weight
+        
+        suit_honors['total_honor_power'] = total_honor_power
+        return suit_honors
     
-    return sum_honor_s, sum_honor_h, sum_honor_d, sum_honor_c, honor_power
-
-def extract_features_from_hand(hand1, hand2, as_dataframe=True):
-    # Ekstrak fitur dari pasangan tangan.
-
-    combined_hand = hand1 + hand2
-
-    # Distribusi suit
-    dist = get_distribution(combined_hand)
-    spades, hearts, diamonds, clubs = dist
-
-    # HCP per suit
-    hcp_spades = calculate_hcp([c for c in combined_hand if c.endswith('S')])
-    hcp_hearts = calculate_hcp([c for c in combined_hand if c.endswith('H')])
-    hcp_diamonds = calculate_hcp([c for c in combined_hand if c.endswith('D')])
-    hcp_clubs = calculate_hcp([c for c in combined_hand if c.endswith('C')])
-
-    # Balanced distribution
-    balanced_hand1 = is_balanced(get_distribution(hand1))
-    balanced_hand2 = is_balanced(get_distribution(hand2))
-
-    # Total HCP
-    total_hcp = hcp_spades + hcp_hearts + hcp_diamonds + hcp_clubs
-
-    # Honor weight calculations
-    sum_honor_s, sum_honor_h, sum_honor_d, sum_honor_c, honor_power = calculate_partnership_honor_weight_per_suit(hand1, hand2)
-
-    # Rentang jumlah kartu per suit
-    def get_cardinality_range(count):
-        lower = max(0, count - 1)
-        upper = min(13, count + 1)
-        return lower, upper
-
-    num_spades_low, num_spades_high = get_cardinality_range(spades)
-    num_hearts_low, num_hearts_high = get_cardinality_range(hearts)
-    num_diamonds_low, num_diamonds_high = get_cardinality_range(diamonds)
-    num_clubs_low, num_clubs_high = get_cardinality_range(clubs)
-
-    # Dictionary fitur
-    features = {
-        "hcp": total_hcp,
-        "hcp_spades": hcp_spades,
-        "hcp_hearts": hcp_hearts,
-        "hcp_diamonds": hcp_diamonds,
-        "hcp_clubs": hcp_clubs,
-
-        "dist_spades": spades,
-        "dist_hearts": hearts,
-        "dist_diamonds": diamonds,
-        "dist_clubs": clubs,
-
-        "balanced_hand1": balanced_hand1,
-        "balanced_hand2": balanced_hand2,
-
-        "sum_honor_s": sum_honor_s,
-        "sum_honor_h": sum_honor_h,
-        "sum_honor_d": sum_honor_d,
-        "sum_honor_c": sum_honor_c,
-        "honor_power": honor_power,
-
-        "num_spades_low": num_spades_low,
-        "num_spades_high": num_spades_high,
-        "num_hearts_low": num_hearts_low,
-        "num_hearts_high": num_hearts_high,
-        "num_diamonds_low": num_diamonds_low,
-        "num_diamonds_high": num_diamonds_high,
-        "num_clubs_low": num_clubs_low,
-        "num_clubs_high": num_clubs_high,
-    }
-
-    # Return type
-    if as_dataframe:
-        return pd.DataFrame([features])
-    else:
+    def calculate_controls(self, hand: List[str]) -> Tuple[int, int]:
+        """
+        Calculate controls (Aces and Kings).
+        Returns: (total_controls, aces_count)
+        """
+        aces = sum(1 for card in hand if card[0] == 'A')
+        kings = sum(1 for card in hand if card[0] == 'K')
+        total_controls = aces * 2 + kings
+        return total_controls, aces
+    
+    def calculate_quick_tricks(self, hand: List[str]) -> float:
+        """Calculate quick tricks for each suit and total."""
+        quick_tricks = 0
+        
+        for suit in self.suits:
+            suit_cards = [card for card in hand if card.endswith(suit)]
+            honors = [card[0] for card in suit_cards if card[0] in ['A', 'K', 'Q']]
+            
+            if 'A' in honors and 'K' in honors:
+                quick_tricks += 2.0
+            elif 'A' in honors:
+                quick_tricks += 1.0
+            elif 'K' in honors and 'Q' in honors:
+                quick_tricks += 1.0
+            elif 'K' in honors:
+                quick_tricks += 0.5
+        
+        return quick_tricks
+    
+    def extract_comprehensive_features(self, hand1: List[str], hand2: List[str]) -> Dict:
+        """Extract comprehensive features from partnership hands."""
+        combined_hand = hand1 + hand2
+        
+        total_hcp = self.calculate_hcp(combined_hand)
+        hcp_hand1 = self.calculate_hcp(hand1)
+        hcp_hand2 = self.calculate_hcp(hand2)
+        
+        dist_combined = self.get_distribution(combined_hand)
+        dist_hand1 = self.get_distribution(hand1)
+        dist_hand2 = self.get_distribution(hand2)
+        
+        balance_cat1, balance_score1 = self.classify_distribution(dist_hand1)
+        balance_cat2, balance_score2 = self.classify_distribution(dist_hand2)
+        
+        honor_metrics = self.calculate_partnership_honor_power(hand1, hand2)
+        
+        controls1, aces1 = self.calculate_controls(hand1)
+        controls2, aces2 = self.calculate_controls(hand2)
+        qt1 = self.calculate_quick_tricks(hand1)
+        qt2 = self.calculate_quick_tricks(hand2)
+        
+        hcp_difference = abs(hcp_hand1 - hcp_hand2)
+        longest_suit = max(dist_combined)
+        shortest_suit = min(dist_combined)
+        suit_range = longest_suit - shortest_suit
+        
+        suits_8plus = sum(1 for length in dist_combined if length >= 8)
+        suits_9plus = sum(1 for length in dist_combined if length >= 9)
+        
+        features = {
+            'total_hcp': total_hcp,
+            'hcp_hand1': hcp_hand1,
+            'hcp_hand2': hcp_hand2,
+            'hcp_difference': hcp_difference,
+            'dist_spades': dist_combined[0],
+            'dist_hearts': dist_combined[1], 
+            'dist_diamonds': dist_combined[2],
+            'dist_clubs': dist_combined[3],
+            'longest_suit': longest_suit,
+            'shortest_suit': shortest_suit,
+            'suit_range': suit_range,
+            'suits_8plus': suits_8plus,
+            'suits_9plus': suits_9plus,
+            'balance_score1': balance_score1,
+            'balance_score2': balance_score2,
+            'avg_balance_score': (balance_score1 + balance_score2) / 2,
+            'total_controls': controls1 + controls2,
+            'total_aces': aces1 + aces2,
+            'total_quick_tricks': qt1 + qt2,
+            **honor_metrics
+        }
+        
         return features
-    
-# hand1 = ['AS', 'KS', 'QS', 'JS', 'TS', '9H', '8H', '7H', '6D', '5D', '4D', '3C', '2C']
-# hand2 = ['AH', 'KH', 'QH', 'JH', 'TH', '9S', '8S', '7S', '6C', '5C', '4C', '3D', '2D']
-# features = extract_features_from_hand(hand1, hand2, as_dataframe=True)
-# print(features)

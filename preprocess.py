@@ -1,114 +1,143 @@
-# preprocess.py
-
-import json
 import pandas as pd
-from features.extractor import extract_features_from_hand
-from tqdm import tqdm
-import logging
+import json
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 import os
+import joblib
+import logging
+from features.extractor import BridgeHandAnalyzer
+from utils.helpers import parse_contract, map_level_to_category
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def load_json_dataset(file_path):
-    # Membaca dataset JSON bridge.
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File tidak ditemukan: {file_path}")
+def preprocess_data(json_path, processed_dir, selected_features):
+    """
+    Preprocess dataset JSON, ekstrak fitur, normalisasi, dan simpan hasilnya.
     
-    logging.info(f"Memuat dataset dari {file_path}...")
-    with open(file_path, 'r') as f:
-        data = json.load(f)
-    return data
-
-def is_valid_hand(hand):
-    # Validasi bahwa tangan memiliki 13 kartu unik.
-    # Format kartu seperti: ['AS', 'KH', ...]
-    if len(hand) != 13:
-        return False, "Jumlah kartu tidak 13"
+    Args:
+        json_path (str): Path ke file JSON dataset.
+        processed_dir (str): Direktori untuk menyimpan hasil preprocessing.
+        selected_features (list): Daftar 10 fitur utama yang akan digunakan.
     
-    # Cek duplikasi dalam satu hand
-    unique_cards = set(hand)
-    if len(unique_cards) < 13:
-        return False, "Ada duplikasi kartu dalam satu tangan"
-
-    return True, ""
-
-def has_duplicate_cards(hand1, hand2):
-    # Cek apakah ada kartu yang muncul di kedua tangan
-    duplicates = set(hand1) & set(hand2)
-    return len(duplicates) > 0
-
-def create_dataframe_from_dataset(dataset):
-    # Buat DataFrame dengan fitur ekstraksi dari tiap board
-    rows = []
-    for idx, board in enumerate(tqdm(dataset, desc="Mengekstrak Fitur", unit="board")):
+    Returns:
+        X_train, X_test, y_suit_train, y_suit_test, y_category_train, y_category_test, scaler
+    
+    Raises:
+        FileNotFoundError: Jika file JSON tidak ditemukan.
+        ValueError: Jika format JSON salah atau ukuran tangan tidak valid.
+        KeyError: Jika fitur yang dipilih tidak ada.
+        PermissionError: Jika tidak dapat menulis ke direktori.
+    """
+    logger.info(f"Starting preprocessing with json_path: {json_path}")
+    
+    analyzer = BridgeHandAnalyzer()
+    
+    # Baca dataset
+    try:
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        logger.info(f"Loaded {len(data)} boards from {json_path}")
+    except FileNotFoundError:
+        logger.error(f"Dataset not found at {json_path}")
+        raise
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON format in {json_path}")
+        raise
+    
+    features = []
+    suits = []
+    categories = []
+    
+    for i, board in enumerate(data):
         try:
-            # Validasi struktur board
-            if "hand1" not in board or "hand2" not in board or "contract" not in board:
-                logging.warning(f"Board {idx + 1}: Struktur tidak lengkap → dilewati")
-                continue
-
-            hand1 = board["hand1"]
-            hand2 = board["hand2"]
-
-            # Validasi jumlah kartu
-            valid_h1, msg_h1 = is_valid_hand(hand1)
-            valid_h2, msg_h2 = is_valid_hand(hand2)
-
-            if not valid_h1:
-                logging.warning(f"Board {idx + 1}, hand1 tidak valid: {msg_h1} → dilewati")
-                continue
-            if not valid_h2:
-                logging.warning(f"Board {idx + 1}, hand2 tidak valid: {msg_h2} → dilewati")
-                continue
-
-            # Validasi duplikasi kartu antara hand1 dan hand2
-            if has_duplicate_cards(hand1, hand2):
-                logging.warning(f"Board {idx + 1}: Ada duplikasi kartu antara hand1 dan hand2 → dilewati")
-                continue
-
-            # Ekstrak fitur dari pasangan tangan
-            features = extract_features_from_hand(hand1, hand2, as_dataframe=False)
-            features["contract"] = board["contract"]
-            rows.append(features)
-
-        except Exception as e:
-            logging.error(f"Error pada board {idx + 1}: {e}")
-            continue
-
-    if not rows:
-        logging.error("Tidak ada data yang diproses. Dataset tidak valid atau kosong.")
-        return None
-
-    df = pd.DataFrame(rows)
-    logging.info(f"Ekstraksi selesai. {len(df)} board berhasil diproses.")
-    return df
-
-
-def save_processed_data(df, output_path):
-    # Simpan DataFrame ke file CSV
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.to_csv(output_path, index=False)
-    logging.info(f"\nData berhasil disimpan ke {output_path}")
-
+            hand1, hand2 = board['hand1'], board['hand2']
+            contract = board['contract']
+            
+            # Validasi ukuran tangan
+            if len(hand1) != 13 or len(hand2) != 13:
+                raise ValueError(f"Invalid hand size in board {i}: {board}")
+            
+            # Ekstrak semua fitur
+            hand_features = analyzer.extract_comprehensive_features(hand1, hand2)
+            
+            # Validasi fitur
+            missing_features = set(selected_features) - set(hand_features.keys())
+            if missing_features:
+                raise KeyError(f"Missing features in board {i}: {missing_features}")
+            
+            # Pilih hanya 10 fitur utama
+            selected_hand_features = {k: v for k, v in hand_features.items() if k in selected_features}
+            features.append(selected_hand_features)
+            
+            suit, level = parse_contract(contract)
+            category = map_level_to_category(level, suit)
+            suits.append(suit)
+            categories.append(category)
+            
+        except KeyError as e:
+            logger.error(f"Missing key in board {i}: {e}")
+            raise
+        except ValueError as e:
+            logger.error(f"Invalid data in board {i}: {e}")
+            raise
+    
+    logger.info(f"Extracted features for {len(features)} boards")
+    
+    X = pd.DataFrame(features)
+    y_suit = np.array(suits)
+    y_category = np.array(categories)
+    
+    # Validasi data
+    if X.isna().any().any():
+        logger.error("NaN values found in features")
+        raise ValueError("NaN values found in features")
+    
+    # Normalisasi fitur
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
+    logger.info("Features normalized")
+    
+    # Bagi data
+    X_train, X_test, y_suit_train, y_suit_test, y_category_train, y_category_test = train_test_split(
+        X_scaled, y_suit, y_category, test_size=0.2, random_state=42, stratify=y_category
+    )
+    logger.info(f"Data split: {len(X_train)} training, {len(X_test)} testing")
+    
+    # Simpan hasil preprocessing
+    try:
+        os.makedirs(processed_dir, exist_ok=True)
+        X_train.to_csv(os.path.join(processed_dir, 'X_train.csv'), index=False)
+        X_test.to_csv(os.path.join(processed_dir, 'X_test.csv'), index=False)
+        np.save(os.path.join(processed_dir, 'y_suit_train.npy'), y_suit_train)
+        np.save(os.path.join(processed_dir, 'y_suit_test.npy'), y_suit_test)
+        np.save(os.path.join(processed_dir, 'y_category_train.npy'), y_category_train)
+        np.save(os.path.join(processed_dir, 'y_category_test.npy'), y_category_test)
+        joblib.dump(scaler, os.path.join(processed_dir, 'scaler.pkl'))
+        with open(os.path.join(processed_dir, 'selected_features.json'), 'w') as f:
+            json.dump(selected_features, f)
+        logger.info(f"Preprocessing results saved to {processed_dir}")
+    except PermissionError:
+        logger.error(f"Cannot write to directory {processed_dir}")
+        raise
+    
+    return X_train, X_test, y_suit_train, y_suit_test, y_category_train, y_category_test, scaler
 
 if __name__ == "__main__":
-    # Path input dan output
-    input_file = "data/raw/bridge_dataset.json"
-    output_file = "data/processed/features.csv"
-
+    # Konfigurasi untuk pengujian langsung
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(base_dir, 'data/raw/bridge_dataset.json')
+    processed_dir = os.path.join(base_dir, 'data/processed')
+    selected_features = [
+        'total_hcp', 'dist_spades', 'dist_hearts', 'dist_diamonds', 'dist_clubs',
+        'balance_score1', 'balance_score2', 'total_honor_power', 'longest_suit', 'total_controls'
+    ]
+    
     try:
-        # Baca dataset
-        dataset = load_json_dataset(input_file)
-
-        # Proses dataset
-        df_features = create_dataframe_from_dataset(dataset)
-
-        if df_features is not None:
-            # Simpan hasil ekstraksi
-            save_processed_data(df_features, output_file)
-        else:
-            logging.error("Proses preprocessing gagal karena tidak ada data valid.")
-
+        preprocess_data(json_path, processed_dir, selected_features)
     except Exception as e:
-        logging.error(f"Kesalahan fatal saat preprocessing: {e}")
+        logger.error(f"Preprocessing failed: {e}")
+        raise

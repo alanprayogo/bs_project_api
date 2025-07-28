@@ -1,104 +1,166 @@
-import os
 import pandas as pd
-from features.extractor import extract_features_from_hand
-from models.nsga2_optimizer import optimize_contract_strategy
-from utils.recommender import select_best_contract_based_on_all_criteria
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
 import joblib
+import json
+import os
+import logging
+from features.extractor import BridgeHandAnalyzer
+from models.nsga2_optimizer import optimize_contract
 
-MODEL_DIR = "./models/saved/"
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Load model dan encoder
-try:
-    suit_model = joblib.load(os.path.join(MODEL_DIR, "rf_contract_suit.pkl"))
-    level_model = joblib.load(os.path.join(MODEL_DIR, "rf_contract_level.pkl"))
-    le_suit = joblib.load(os.path.join(MODEL_DIR, "label_encoder_suit.pkl"))
-    le_level = joblib.load(os.path.join(MODEL_DIR, "label_encoder_level.pkl"))
-except Exception as e:
-    raise FileNotFoundError(f"Model atau label encoder tidak ditemukan di {MODEL_DIR}. Jalankan train_model.py terlebih dahulu.")
+def calculate_hcp(hand):
+    """Calculate High Card Points (HCP) for a hand."""
+    hcp = 0
+    for card in hand:
+        rank = card[0] if len(card) == 3 else card[:1]
+        if rank == 'A':
+            hcp += 4
+        elif rank == 'K':
+            hcp += 3
+        elif rank == 'Q':
+            hcp += 1
+        elif rank == 'J':
+            hcp += 1
+        elif rank == 'T':
+            hcp += 1
+    return hcp
 
-def predict_contract_verbose(hand1, hand2, debug=False):
-    print("[1] EKSTRAKSI FITUR DARI TANGAN")
-    features = extract_features_from_hand(hand1, hand2, as_dataframe=False)
-    feature_df = pd.DataFrame([features])
+def get_suit_distribution(hand1, hand2):
+    """Get combined suit distribution strength."""
+    suits = {'S': 0, 'H': 0, 'D': 0, 'C': 0}
+    for card in hand1 + hand2:
+        suit = card[-1]
+        suits[suit] += 1
+    dist = []
+    for suit, count in suits.items():
+        if count >= 8:
+            dist.append(f"strong {suit}")
+        elif count >= 5:
+            dist.append(f"moderate {suit}")
+    return ", ".join(dist) if dist else "balanced"
 
-    hcp_total = features.get("hcp", 0)
-    honor_power = features.get("honor_power", 0)
-    sum_honor_s = features.get("sum_honor_s", 0)
-    sum_honor_h = features.get("sum_honor_h", 0)
-    sum_honor_d = features.get("sum_honor_d", 0)
-    sum_honor_c = features.get("sum_honor_c", 0)
-    dist_spades = features.get("dist_spades", 0)
-    dist_hearts = features.get("dist_hearts", 0)
-    dist_diamonds = features.get("dist_diamonds", 0)
-    dist_clubs = features.get("dist_clubs", 0)
+def map_category_to_level(category):
+    """Map category to contract level."""
+    category_to_level = {0: 3, 1: 5, 2: 6, 3: 7}  # Partial game: 3, Game: 5, Small slam: 6, Grand slam: 7
+    return category_to_level.get(category, 3)
 
-    print(f"- HCP Total: {hcp_total}")
-    print(f"- Honor Power: {honor_power}")
-    print(f"- Honor Spades: {sum_honor_s}")
-    print(f"- Honor Hearts: {sum_honor_h}")
-    print(f"- Honor Diamonds: {sum_honor_d}")
-    print(f"- Honor Clubs: {sum_honor_c}")
-    print(f"- Distribusi: {dist_spades}S {dist_hearts}H {dist_diamonds}D {dist_clubs}C")
-
-    # Prediksi awal
-    suit_pred_encoded = suit_model.predict(feature_df)[0]
-    predicted_suit = le_suit.inverse_transform([suit_pred_encoded])[0]
-    level_pred_encoded = level_model.predict(feature_df)[0]
-    predicted_level = le_level.inverse_transform([level_pred_encoded])[0]
-    predicted_contract = f"{predicted_level}{predicted_suit}"
-
-    print("\n[1] PREDIKSI AWAL DARI MODEL ML")
-    print(f"- Prediksi Suit: {predicted_suit}")
-    print(f"- Prediksi Level: {predicted_level}")
-    print(f"- Kontrak Awal: {predicted_contract}")
-
-    # Optimisasi strategi
-    print("\n[2] STRATEGI HASIL OPTIMISASI NSGA-II")
-    feature_array = list(features.values())
-    nsga2_solutions = optimize_contract_strategy(feature_array, n_gen=100)
-
-    recommendations = []
-    for i, x in enumerate(nsga2_solutions[:5]):
-        recommendations.append([
-            float(x[0]),  # weight_hcp
-            float(x[1]),  # weight_honor_spades
-            float(x[2]),  # weight_honor_hearts
-            float(x[3]),  # weight_honor_diamonds
-            float(x[4]),  # weight_honor_clubs
-            float(x[5]),  # weight_balance
-            float(x[6]),  # weight_suit
-            float(x[7])   # prefer_major
-        ])
-
-    # Pilih kontrak terbaik
-    print("\n[3] VALIDASI DAN REKOMENDASI AKHIR")
-    best_recommendation = select_best_contract_based_on_all_criteria(
-        features,
-        predicted_contract,
-        recommendations,
-        debug=debug
-    )
-
-    print(f"- Kontrak Direkomendasikan: {best_recommendation['final_recommendation']}")
-    print(f"- Valid: {'Ya' if best_recommendation['valid'] else 'Tidak'}")
-    print(f"- Tingkat Keyakinan Akhir: {best_recommendation['confidence_score']:.2f}")
-
-    if best_recommendation['reasons']:
-        print("Alasan:")
-        for reason in best_recommendation['reasons']:
-            print(f" - {reason}")
-    if best_recommendation['suggestions']:
-        print("Saran:")
-        for suggestion in best_recommendation['suggestions']:
-            print(f" - {suggestion}")
-
-    return best_recommendation
+def predict_contract(hand1, hand2):
+    """
+    Prediksi kontrak optimal untuk dua tangan bridge menggunakan model yang sudah dilatih.
+    
+    Args:
+        hand1 (list): Daftar 13 kartu untuk tangan pertama.
+        hand2 (list): Daftar 13 kartu untuk tangan kedua.
+    
+    Returns:
+        dict: Kontrak optimal dengan kunci 'suit', 'level', 'confidence', serta informasi HCP, distribusi suit, dan early prediction.
+    
+    Raises:
+        FileNotFoundError: Jika file model atau scaler tidak ditemukan.
+        ValueError: Jika input tangan tidak valid atau fitur tidak sesuai.
+    """
+    logger.info("Starting contract prediction")
+    
+    # Validasi input
+    if len(hand1) != 13 or len(hand2) != 13:
+        logger.error("Each hand must contain exactly 13 cards")
+        raise ValueError("Each hand must contain exactly 13 cards")
+    
+    # Tentukan direktori
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    processed_dir = os.path.join(base_dir, 'data/processed')
+    saved_dir = os.path.join(base_dir, 'models/saved')
+    
+    # Muat model, scaler, dan selected_features
+    try:
+        rf_suit = joblib.load(os.path.join(saved_dir, 'rf_suit.pkl'))
+        rf_category = joblib.load(os.path.join(saved_dir, 'rf_category.pkl'))
+        scaler = joblib.load(os.path.join(processed_dir, 'scaler.pkl'))
+        with open(os.path.join(processed_dir, 'selected_features.json'), 'r') as f:
+            selected_features = json.load(f)
+        logger.info("Loaded models, scaler, and selected features")
+    except FileNotFoundError as e:
+        logger.error(f"Required file not found: {e}")
+        raise
+    
+    # Ekstrak fitur
+    try:
+        analyzer = BridgeHandAnalyzer()
+        hand_features = analyzer.extract_comprehensive_features(hand1, hand2)
+        selected_hand_features = [hand_features[f] for f in selected_features]
+        scaled_features = scaler.transform([selected_hand_features])[0]
+        logger.info("Extracted features for the hand")
+        
+        # Hitung HCP dan distribusi suit
+        hand1_hcp = calculate_hcp(hand1)
+        hand2_hcp = calculate_hcp(hand2)
+        total_hcp = hand1_hcp + hand2_hcp
+        hcp_strength = "moderate" if total_hcp < 25 else "strong"
+        suit_dist = get_suit_distribution(hand1, hand2)
+        
+        logger.info(f"hand1_hcp: {hand1_hcp}")
+        logger.info(f"hand2_hcp: {hand2_hcp}")
+        logger.info(f"total_hcp: {total_hcp} HCP, {hcp_strength} strength")
+        logger.info(f"suit_dist: {suit_dist}")
+        
+        # Early prediction dari Random Forest
+        suit_names = {0: 'Spades', 1: 'Hearts', 2: 'Diamonds', 3: 'Clubs', 4: 'No Trump'}
+        suit_abbr = {0: 'S', 1: 'H', 2: 'D', 3: 'C', 4: 'NT'}
+        early_suit = rf_suit.predict([scaled_features])[0]
+        early_category = rf_category.predict([scaled_features])[0]
+        early_level = map_category_to_level(early_category)
+        early_suit_prob = rf_suit.predict_proba([scaled_features])[0][early_suit]
+        early_category_prob = rf_category.predict_proba([scaled_features])[0][early_category]
+        early_confidence = early_suit_prob * early_category_prob * 100
+        early_contract = f"{early_level}{suit_names[early_suit]}"
+        early_contract_abbr = f"{early_level}{suit_abbr[early_suit]}"
+        logger.info(f"Early predicted contract: {early_contract}, confidence: {early_confidence:.1f}%")
+    except KeyError as e:
+        logger.error(f"Feature extraction failed: {e}")
+        raise
+    
+    # Optimasi kontrak
+    try:
+        best_contract, confidence = optimize_contract(rf_suit, rf_category, selected_hand_features, scaler, selected_features)
+        suit, level = int(best_contract[0]), int(best_contract[1])
+        logger.info(f"Optimal contract: {level}{suit_names[suit]}")
+        
+        return {
+            'suit': suit_abbr[suit],
+            'level': level,
+            'confidence': confidence,
+            'hand1_hcp': hand1_hcp,
+            'hand2_hcp': hand2_hcp,
+            'total_hcp': total_hcp,
+            'hcp_strength': hcp_strength,
+            'suit_dist': suit_dist,
+            'early_contract': early_contract_abbr,
+            'early_confidence': early_confidence
+        }
+    except Exception as e:
+        logger.error(f"Optimization failed: {e}")
+        raise
 
 if __name__ == "__main__":
-    hand1 = ["AS", "KS", "QS", "JS", "TS", "9H", "8H", "7H", "6H", "5H", "4D", "3D", "2C"]
-    hand2 = ["2S", "3S", "4S", "AH", "KH", "AD", "KD", "8C", "6D", "7D", "5D", "3C", "4C"]
+    # Contoh tangan untuk pengujian
+    # hand1 = ["AS", "KS", "QS", "JS", "TS", "9S", "8S", "AH", "KH", "QH", "AD", "KD", "QD"]
+    # hand2 = ["AC", "KC", "QC", "JC", "TC", "9C", "8C", "7C", "6C", "5C", "4C", "3C", "2C"]
 
-    print("=== SISTEM REKOMENDASI KONTRAK BRIDGE ===\n")
-    result = predict_contract_verbose(hand1, hand2, debug=True)
+    hand1 = ["TS", "KH", "TH", "6H", "5H", "4H", "JD", "9D", "8D", "5D", "QC", "9C", "8C"]
+    hand2 = ["KS", "JS", "8S", "7S", "6S", "4S", "2S", "AH", "3H", "4D", "AC", "7C", "3C"]
+    
+    try:
+        result = predict_contract(hand1, hand2)
+        print("\nResult:")
+        print(f"Early predicted contract: {result['early_contract']}, Confidence Score: {result['early_confidence']:.1f}%")
+        print(f"Predicted contract: {result['level']}{result['suit']}, Confidence Score: {result['confidence']:.1f}%")
+        print(f"hand1_hcp: {result['hand1_hcp']}")
+        print(f"hand2_hcp: {result['hand2_hcp']}")
+        print(f"total_hcp: {result['total_hcp']} HCP, {result['hcp_strength']} strength")
+        print(f"suit_dist: {result['suit_dist']}")
+    except Exception as e:
+        logger.error(f"Prediction failed: {e}")
+        raise

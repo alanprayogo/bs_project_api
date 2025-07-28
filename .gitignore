@@ -5,14 +5,10 @@ __pycache__/
 /env/
 /data/
 /notebooks/
-/results/
 
 # Files to ignore
 /features/all_honor_power.py
-/models/feature_names.py
 /models/predictor.py
 /utils/evaluation.py
 /main.py
 /config.py
-/test_scoring.py
-/test_scoring_with_nsga2.py
