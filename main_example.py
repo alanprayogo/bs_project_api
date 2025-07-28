@@ -1,5 +1,4 @@
-# main_example.py
-import config
+# main.py
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
@@ -12,18 +11,14 @@ import os
 import subprocess
 from pathlib import Path
 import json
+from predict import predict_contract
 
-# Import fungsi prediksi dan validasi
-from predict import predict_contract_verbose
+import config
 
 app = FastAPI(
-    title="Bridge Bidding & Contract Prediction API",
-    description="Sistem prediksi biding dan kontrak bridge berbasis ML + NSGA-II + Validasi Aturan Bridge"
+    title="Bridge Bidding & Contract Recommendation API",
+    description="Sistem rekomendasi biding dan kontrak bridge berbasis ML + NSGA-II + Validasi Aturan Bridge"
 )
-
-@app.get(config.PATH)
-def read_root():
-    return {"message": "Welcome to Bridge Bidding & Contract Prediction!"}
 
 # ======= Biding =======
 class HandRequest(BaseModel):
@@ -72,8 +67,8 @@ async def analyze_hand(request: HandRequest):
 
 # ======= Kontrak =======
 class BridgeHandRequest(BaseModel):
-    hand1: List[str]
-    hand2: List[str]
+    hand1: list[str]
+    hand2: list[str]
     
     @validator('hand1', 'hand2')
     def validate_hand_cards(cls, v, field):
@@ -113,20 +108,25 @@ class BridgeHandRequest(BaseModel):
 
 @app.post("/recommend")
 async def recommend_contract(request: BridgeHandRequest):
-    # Endpoint untuk merekomendasikan kontrak bridge terbaik berdasarkan:
-    # - Random Forest (ML)
-    # - Optimisasi strategi dengan NSGA-II
-    # - Validasi aturan bridge
     try:
-        result = predict_contract_verbose(request.hand1, request.hand2)
+        # Run predict_contract from predict.py
+        result = predict_contract(request.hand1, request.hand2)
         
-        return {
-            "final_recommendation": result["final_recommendation"],
-            "valid": result["valid"],
-            "confidence_score": result["confidence_score"],
-            "reasons": result["reasons"],
-            "suggestions": result["suggestions"]
+        # Format the response to match the terminal output
+        response = {
+            "result": {
+                "early_predicted_contract": result['early_contract'],
+                "early_confidence_score": round(result['early_confidence'], 1),
+                "predicted_contract": f"{result['level']}{result['suit']}",
+                "confidence_score": round(result['confidence'], 1),
+                "hand1_hcp": result['hand1_hcp'],
+                "hand2_hcp": result['hand2_hcp'],
+                "total_hcp": f"{result['total_hcp']} HCP, {result['hcp_strength']} strength",
+                "suit_dist": result['suit_dist']
+            }
         }
+        
+        return response
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
