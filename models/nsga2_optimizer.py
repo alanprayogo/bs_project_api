@@ -125,7 +125,7 @@ class ContractOptimizationProblem(ElementwiseProblem):
         if suit_pred == 'NT':
             # Untuk NT, gunakan balance_score dan jumlah honor kuat per suit
             total_score += balance_score
-            strong_suits = sum(1 for s in ['spades', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0)
+            strong_suits = sum(1 for s in ['spades', 'hearts', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0)
             suit_score = sum(honor_scores[s] for s in ['spades', 'hearts', 'diamonds', 'clubs'] if self.feature_dict[f"sum_honor_{s[0]}"] >= 1.0) * (0.5 + 0.1 * strong_suits)
         else:
             # Untuk suit kontrak, gunakan suit_score dan honor suit yang diprediksi
