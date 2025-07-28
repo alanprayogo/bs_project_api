@@ -5,6 +5,7 @@ __pycache__/
 /env/
 /data/
 /notebooks/
+/bridge_analysis_output/
 
 # Files to ignore
 /features/all_honor_power.py
