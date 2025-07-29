@@ -9,7 +9,7 @@ model = YOLO('../yolo-weights/playingCards.pt')
 # Daftar path gambar yang ingin diproses
 image_paths = [
     './running-yolo/images/in_kontrak/hand1.jpg',
-    './running-yolo/images/in_kontrak/hand1.jpg'
+    './running-yolo/images/in_kontrak/hand2.jpg'
 ]
 
 # File output JSON
