@@ -3,7 +3,8 @@ __pycache__/
 
 # Folders to ignore
 /env/
-/data/
+/data/raw/
+/data/create_manual_dataset.py
 /notebooks/
 /bridge_analysis_output/
 
