@@ -11,5 +11,5 @@ __pycache__/
 /features/all_honor_power.py
 /models/predictor.py
 /utils/evaluation.py
-/main.py
+# /main.py
 /config.py
